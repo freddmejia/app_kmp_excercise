@@ -1,0 +1,91 @@
+import kotlin.Boolean;
+
+-- Editable two-level catalogue. Sessions always point at a `muscle` (a leaf),
+-- never at a group directly; each group ships a "General" leaf in the seed so
+-- group-level logging still aggregates uniformly (TRAINING.md §3).
+CREATE TABLE muscle_group (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    is_archived INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE muscle (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id    INTEGER NOT NULL REFERENCES muscle_group(id),
+    name        TEXT NOT NULL,
+    is_archived INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX muscle_group_id_idx ON muscle(group_id);
+
+-- ---------- groups ----------
+
+selectAllGroups:
+SELECT * FROM muscle_group ORDER BY name ASC;
+
+selectActiveGroups:
+SELECT * FROM muscle_group WHERE is_archived = 0 ORDER BY name ASC;
+
+insertGroup:
+INSERT INTO muscle_group (name, is_archived, created_at) VALUES (?, 0, ?);
+
+renameGroup:
+UPDATE muscle_group SET name = ? WHERE id = ?;
+
+setGroupArchived:
+UPDATE muscle_group SET is_archived = ? WHERE id = ?;
+
+-- Only legal when no leaf of this group has history; check countSessionsForGroup.
+deleteGroup:
+DELETE FROM muscle_group WHERE id = ?;
+
+-- ---------- muscles (leaves) ----------
+
+selectAllMuscles:
+SELECT * FROM muscle ORDER BY name ASC;
+
+selectActiveMuscles:
+SELECT * FROM muscle WHERE is_archived = 0 ORDER BY name ASC;
+
+selectMusclesByGroup:
+SELECT * FROM muscle WHERE group_id = ? AND is_archived = 0 ORDER BY name ASC;
+
+selectMuscleById:
+SELECT * FROM muscle WHERE id = ?;
+
+-- The log picker: active leaves with their group, ordered by usage so the most
+-- trained surface first (TRAINING.md §6).
+selectPickerByUsage:
+SELECT m.id, m.name, m.group_id, g.name AS group_name, COUNT(sm.id) AS usage_count
+FROM muscle m
+JOIN muscle_group g ON g.id = m.group_id
+LEFT JOIN session_muscle sm ON sm.muscle_id = m.id
+WHERE m.is_archived = 0 AND g.is_archived = 0
+GROUP BY m.id
+ORDER BY g.name ASC, usage_count DESC, m.name ASC;
+
+insertMuscle:
+INSERT INTO muscle (group_id, name, is_archived, created_at) VALUES (?, ?, 0, ?);
+
+renameMuscle:
+UPDATE muscle SET name = ? WHERE id = ?;
+
+setMuscleArchived:
+UPDATE muscle SET is_archived = ? WHERE id = ?;
+
+-- Integrity rule 3: hard delete only with no referencing sessions.
+countSessionsForMuscle:
+SELECT COUNT(*) FROM session_muscle WHERE muscle_id = ?;
+
+countSessionsForGroup:
+SELECT COUNT(*) FROM session_muscle sm
+JOIN muscle m ON m.id = sm.muscle_id
+WHERE m.group_id = ?;
+
+deleteMuscle:
+DELETE FROM muscle WHERE id = ?;
+
+lastInsertRowId:
+SELECT last_insert_rowid();

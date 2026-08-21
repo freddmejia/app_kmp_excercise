@@ -1,47 +1,85 @@
 package botix.dev.myweeklyroutinegymapp
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import org.jetbrains.compose.resources.painterResource
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListScreen
+import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightScreen
+import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogScreen
+import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogScreen
 
-import myweeklyroutinegymapp.shared.generated.resources.Res
-import myweeklyroutinegymapp.shared.generated.resources.compose_multiplatform
+/**
+ * The three feature screens, one per top-level tab.
+ *
+ * Tab state rather than a navigation library: these are peers with no hierarchy, no
+ * arguments and no deep links, so a nav graph would add a dependency and a back stack
+ * that nothing here needs. Introduce one when a screen gains a detail route.
+ */
+private enum class Destination(val label: String, val symbol: String) {
+    WORKOUT("Log", "🏋"),
+    ACTIVITIES("Activities", "📋"),
+    WEIGHT("Weight", "⚖"),
+}
 
+/**
+ * Shared UI root for both platforms.
+ *
+ * There is no `KoinContext` wrapper: as of Koin 4.1 `startKoin()` installs the Compose
+ * context itself, and wrapping again is deprecated. Koin must therefore be started
+ * *before* this composes — `GymApplication` does it on Android, `startKoinIos()`
+ * called from `iOSApp.swift` does it on iOS.
+ *
+ * Not previewable: the screens resolve real dependencies. Preview their `…Content`
+ * composables instead, which take their state as a parameter.
+ */
 @Composable
-@Preview
 fun App() {
     MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
-            }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
+        // Saved as an ordinal: enums have no built-in Saver in Compose Multiplatform,
+        // so storing the value directly would not survive process death.
+        var selectedIndex by rememberSaveable { mutableStateOf(0) }
+        // The muscle catalogue is a detail of the Log tab, not a peer of it, so it
+        // is a flag on that tab rather than a fourth destination.
+        var showMuscleCatalog by rememberSaveable { mutableStateOf(false) }
+        val destination = Destination.entries[selectedIndex]
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize().safeContentPadding(),
+            bottomBar = {
+                NavigationBar {
+                    Destination.entries.forEachIndexed { index, entry ->
+                        NavigationBarItem(
+                            selected = index == selectedIndex,
+                            onClick = { selectedIndex = index },
+                            icon = { Text(entry.symbol) },
+                            label = { Text(entry.label) },
+                        )
+                    }
+                }
+            },
+        ) { innerPadding ->
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                when (destination) {
+                    Destination.WORKOUT ->
+                        if (showMuscleCatalog) {
+                            MuscleCatalogScreen(onBack = { showMuscleCatalog = false })
+                        } else {
+                            WorkoutLogScreen(onManageMuscles = { showMuscleCatalog = true })
+                        }
+                    Destination.ACTIVITIES -> ActivityListScreen()
+                    Destination.WEIGHT -> BodyWeightScreen()
                 }
             }
         }

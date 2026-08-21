@@ -1,0 +1,167 @@
+-- A strength session: a header plus one row per muscle worked. No load, no reps
+-- (TRAINING.md §1) — the atomic unit is the set, split effective vs. warmup.
+CREATE TABLE workout_session (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    activity_id    INTEGER NOT NULL REFERENCES activity(id),
+    date_epoch_day INTEGER NOT NULL,
+    notes          TEXT,
+    created_at     INTEGER NOT NULL
+);
+
+-- The check IS the row: creating a session_muscle means "I trained this muscle
+-- that day". UNIQUE(session_id, muscle_id) makes a muscle appear once per
+-- session; working it twice in a day sums into the same row (§2.4).
+CREATE TABLE session_muscle (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id     INTEGER NOT NULL REFERENCES workout_session(id) ON DELETE CASCADE,
+    muscle_id      INTEGER NOT NULL REFERENCES muscle(id),
+    effective_sets INTEGER NOT NULL CHECK (effective_sets >= 1),
+    warmup_sets    INTEGER NOT NULL DEFAULT 0 CHECK (warmup_sets >= 0),
+    UNIQUE (session_id, muscle_id)
+);
+
+CREATE INDEX workout_session_date_idx ON workout_session(date_epoch_day);
+CREATE INDEX workout_session_activity_idx ON workout_session(activity_id);
+CREATE INDEX session_muscle_session_idx ON session_muscle(session_id);
+CREATE INDEX session_muscle_muscle_idx ON session_muscle(muscle_id);
+
+-- ---------- sessions ----------
+
+selectSessionById:
+SELECT * FROM workout_session WHERE id = ?;
+
+selectSessionsInRange:
+SELECT * FROM workout_session
+WHERE date_epoch_day BETWEEN :fromDay AND :toDay
+ORDER BY date_epoch_day DESC, created_at DESC;
+
+selectSessionByActivityAndDay:
+SELECT * FROM workout_session WHERE activity_id = ? AND date_epoch_day = ?;
+
+insertSession:
+INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at)
+VALUES (?, ?, ?, ?);
+
+updateSessionNotes:
+UPDATE workout_session SET notes = ? WHERE id = ?;
+
+-- Entries cascade via the FK, provided PRAGMA foreign_keys is on (the driver
+-- factory enables it on both platforms).
+deleteSession:
+DELETE FROM workout_session WHERE id = ?;
+
+-- ---------- entries ----------
+
+selectEntriesForSession:
+SELECT sm.id, sm.session_id, sm.muscle_id, sm.effective_sets, sm.warmup_sets,
+       m.name AS muscle_name, g.id AS group_id, g.name AS group_name
+FROM session_muscle sm
+JOIN muscle m ON m.id = sm.muscle_id
+JOIN muscle_group g ON g.id = m.group_id
+WHERE sm.session_id = ?
+ORDER BY g.name ASC, m.name ASC;
+
+-- Check a muscle: create the entry.
+--
+-- Summing on repeat cannot be one statement here — ON CONFLICT DO UPDATE needs
+-- SQLite 3.24 (API 29+) and minSdk is 24, and INSERT OR REPLACE would overwrite
+-- the sets instead of adding to them. The repository therefore reads
+-- selectEntry first and calls insertEntry or addToEntry inside a transaction.
+insertEntry:
+INSERT INTO session_muscle (session_id, muscle_id, effective_sets, warmup_sets)
+VALUES (?, ?, ?, ?);
+
+selectEntry:
+SELECT * FROM session_muscle WHERE session_id = ? AND muscle_id = ?;
+
+-- Same muscle worked at a second moment in the day: add, do not duplicate (§2.4).
+addToEntry:
+UPDATE session_muscle
+SET effective_sets = effective_sets + :effectiveSets,
+    warmup_sets = warmup_sets + :warmupSets
+WHERE session_id = :sessionId AND muscle_id = :muscleId;
+
+-- Direct edit of an existing entry (replaces rather than sums).
+setEntrySets:
+UPDATE session_muscle SET effective_sets = ?, warmup_sets = ?
+WHERE session_id = ? AND muscle_id = ?;
+
+-- Unchecking a muscle removes the entry.
+deleteEntry:
+DELETE FROM session_muscle WHERE session_id = ? AND muscle_id = ?;
+
+sessionTotals:
+SELECT CAST(COALESCE(SUM(effective_sets), 0) AS INTEGER) AS total_effective,
+       CAST(COALESCE(SUM(warmup_sets), 0) AS INTEGER) AS total_warmup
+FROM session_muscle WHERE session_id = ?;
+
+-- ---------- metrics (§9 traceability) ----------
+
+-- Volume per muscle over a window: effective sets, and the days it was trained.
+volumePerMuscleInRange:
+SELECT m.id AS muscle_id, m.name AS muscle_name, g.id AS group_id, g.name AS group_name,
+       CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
+       CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
+       COUNT(DISTINCT ws.date_epoch_day) AS distinct_days
+FROM session_muscle sm
+JOIN workout_session ws ON ws.id = sm.session_id
+JOIN muscle m ON m.id = sm.muscle_id
+JOIN muscle_group g ON g.id = m.group_id
+WHERE ws.date_epoch_day BETWEEN :fromDay AND :toDay
+GROUP BY m.id
+ORDER BY effective_sets DESC;
+
+-- Group volume = sum of the effective sets of all its leaves, "General" included.
+volumePerGroupInRange:
+SELECT g.id AS group_id, g.name AS group_name,
+       CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
+       CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
+       COUNT(DISTINCT ws.date_epoch_day) AS distinct_days
+FROM session_muscle sm
+JOIN workout_session ws ON ws.id = sm.session_id
+JOIN muscle m ON m.id = sm.muscle_id
+JOIN muscle_group g ON g.id = m.group_id
+WHERE ws.date_epoch_day BETWEEN :fromDay AND :toDay
+GROUP BY g.id
+ORDER BY effective_sets DESC;
+
+-- Requirement 2: which muscles were NOT trained in the window.
+--
+-- NOT EXISTS rather than a LEFT JOIN with HAVING SUM(...) = 0, for two reasons:
+-- the date filter has to sit inside the subquery or a muscle trained outside the
+-- range still counts as trained; and in SQLite a HAVING clause resolves a bare
+-- name against the source columns before the SELECT alias, so
+-- `HAVING effective_sets = 0` silently binds to session_muscle.effective_sets,
+-- which is NULL for unmatched rows and compares false — dropping every row.
+untrainedMusclesInRange:
+SELECT m.id AS muscle_id, m.name AS muscle_name, g.name AS group_name
+FROM muscle m
+JOIN muscle_group g ON g.id = m.group_id
+WHERE m.is_archived = 0
+  AND g.is_archived = 0
+  AND NOT EXISTS (
+      SELECT 1
+      FROM session_muscle sm
+      JOIN workout_session ws ON ws.id = sm.session_id
+      WHERE sm.muscle_id = m.id
+        AND ws.date_epoch_day BETWEEN :fromDay AND :toDay
+  )
+ORDER BY g.name ASC, m.name ASC;
+
+-- Progression: effective sets per muscle per day, for week-over-week trend.
+dailyVolumeForMuscle:
+SELECT ws.date_epoch_day, CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets
+FROM session_muscle sm
+JOIN workout_session ws ON ws.id = sm.session_id
+WHERE sm.muscle_id = :muscleId AND ws.date_epoch_day BETWEEN :fromDay AND :toDay
+GROUP BY ws.date_epoch_day
+ORDER BY ws.date_epoch_day ASC;
+
+-- Streaks / gaps / goal windows: the distinct days an activity was trained.
+trainedDaysForActivity:
+SELECT DISTINCT date_epoch_day FROM workout_session
+WHERE activity_id = :activityId AND date_epoch_day BETWEEN :fromDay AND :toDay
+ORDER BY date_epoch_day ASC;
+
+lastInsertRowId:
+SELECT last_insert_rowid();
