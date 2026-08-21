@@ -5,21 +5,34 @@ import botix.dev.myweeklyroutinegymapp.data.SystemClock
 import botix.dev.myweeklyroutinegymapp.db.DriverFactory
 import botix.dev.myweeklyroutinegymapp.domain.Clock
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveActivityUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveCategoryUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.AssignActivityCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ChangeMeasurementTypeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateActivityUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteActivityUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivitiesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivityPickerUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoriesUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoryUsageUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.UpdateActivityUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.UpdateCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.DeleteBodyWeightUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.GetBodyWeightForDayUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.LogBodyWeightUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.ObserveBodyWeightChartUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.ObserveBodyWeightHistoryUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.ObserveBodyWeightWeekUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ArchiveMuscleUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityMuscleLinksUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityVolumeUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityMuscleSectionsUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetActivityMusclesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.CreateMuscleGroupUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.CreateMuscleUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.DeleteMuscleUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.DeleteSessionUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogMuscleSetsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveGroupVolumeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMuscleGroupsUseCase
@@ -27,6 +40,8 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMusclePicke
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMuscleProgressionUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMuscleVolumeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMusclesUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveDayLogUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveSessionDaysUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveSessionDetailUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveSessionTotalsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveTrainedDaysUseCase
@@ -35,6 +50,7 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.RemoveMuscleFromSe
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.RenameMuscleUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetMuscleSetsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogViewModel
@@ -72,6 +88,8 @@ val databaseModule = module {
 val repositoryModule = module {
     single<Clock> { SystemClock() }
     single { get<GymData>().activities }
+    single { get<GymData>().activityCategories }
+    single { get<GymData>().activityMuscles }
     single { get<GymData>().bodyWeight }
     single { get<GymData>().muscles }
     single { get<GymData>().workouts }
@@ -93,9 +111,24 @@ val domainModule = module {
     factoryOf(::DeleteActivityUseCase)
     factoryOf(::ChangeMeasurementTypeUseCase)
 
+    // Activity categories
+    factoryOf(::ObserveCategoriesUseCase)
+    factoryOf(::ObserveCategoryUsageUseCase)
+    factoryOf(::CreateCategoryUseCase)
+    factoryOf(::UpdateCategoryUseCase)
+    factoryOf(::ArchiveCategoryUseCase)
+    factoryOf(::DeleteCategoryUseCase)
+    factoryOf(::AssignActivityCategoryUseCase)
+
+    // Activity -> muscle link
+    factoryOf(::ObserveActivityMuscleSectionsUseCase)
+    factoryOf(::ObserveActivityMuscleLinksUseCase)
+    factoryOf(::SetActivityMusclesUseCase)
+
     // Body weight
     factoryOf(::ObserveBodyWeightChartUseCase)
     factoryOf(::ObserveBodyWeightHistoryUseCase)
+    factoryOf(::ObserveBodyWeightWeekUseCase)
     factoryOf(::LogBodyWeightUseCase)
     factoryOf(::GetBodyWeightForDayUseCase)
     factoryOf(::DeleteBodyWeightUseCase)
@@ -106,9 +139,13 @@ val domainModule = module {
     factoryOf(::SetMuscleSetsUseCase)
     factoryOf(::RemoveMuscleFromSessionUseCase)
     factoryOf(::ObserveSessionDetailUseCase)
+    factoryOf(::ObserveSessionDaysUseCase)
+    factoryOf(::ObserveDayLogUseCase)
+    factoryOf(::DeleteSessionUseCase)
     factoryOf(::ObserveSessionTotalsUseCase)
     factoryOf(::ObserveMusclePickerUseCase)
     factoryOf(::ObserveGroupVolumeUseCase)
+    factoryOf(::ObserveActivityVolumeUseCase)
     factoryOf(::ObserveMuscleVolumeUseCase)
     factoryOf(::ObserveUntrainedMusclesUseCase)
     factoryOf(::ObserveMuscleProgressionUseCase)
@@ -126,6 +163,7 @@ val domainModule = module {
 
 val viewModelModule = module {
     viewModelOf(::ActivityListViewModel)
+    viewModelOf(::ActivityCategoryViewModel)
     viewModelOf(::BodyWeightViewModel)
     viewModelOf(::WorkoutLogViewModel)
     viewModelOf(::MuscleCatalogViewModel)

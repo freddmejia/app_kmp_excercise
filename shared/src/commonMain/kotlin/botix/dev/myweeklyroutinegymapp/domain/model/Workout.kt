@@ -33,6 +33,28 @@ data class SessionEntry(
     val warmupSets: Long = 0,
 )
 
+/**
+ * One session as the day view lists it: which activity, and what it adds up to.
+ *
+ * A read model, assembled by a single query rather than by fetching each session's
+ * entries — the card shows totals, so loading the entries to add them up would be a
+ * query per row for numbers SQLite can produce in the same pass.
+ */
+data class SessionSummary(
+    val sessionId: Long,
+    val activityId: Long,
+    val activityName: String,
+    val epochDay: Long,
+    val notes: String? = null,
+    val effectiveSets: Long,
+    val warmupSets: Long,
+    /** How many muscles are checked. Zero means the session was started and left. */
+    val muscleCount: Long,
+) {
+    /** Nothing logged yet — the card says so rather than showing a bare "0". */
+    val isEmpty: Boolean get() = muscleCount == 0L
+}
+
 /** Totals for one session, as shown in its summary. */
 data class SessionTotals(
     val effectiveSets: Long,
@@ -56,6 +78,21 @@ data class MuscleVolume(
     val warmupSets: Long,
     /** Distinct days trained — the frequency metric, not a count of entries. */
     val distinctDays: Long,
+)
+
+/**
+ * What one activity added up to over a window — a week, on the Activities screen.
+ *
+ * Only exists for activities that were actually trained in the window. There is no
+ * "zero" row: not being in the result is what "not trained" means.
+ */
+data class ActivityVolume(
+    val activityId: Long,
+    val effectiveSets: Long,
+    val warmupSets: Long,
+    /** Distinct days trained, not sessions — twice in a day is still one day. */
+    val distinctDays: Long,
+    val sessionCount: Long,
 )
 
 /** Volume for a whole group: the sum of all its leaves, "General" included. */

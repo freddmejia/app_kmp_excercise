@@ -24,6 +24,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import myweeklyroutinegymapp.shared.generated.resources.Res
+import myweeklyroutinegymapp.shared.generated.resources.common_add
+import myweeklyroutinegymapp.shared.generated.resources.common_archive
+import myweeklyroutinegymapp.shared.generated.resources.common_cancel
+import myweeklyroutinegymapp.shared.generated.resources.common_delete
+import myweeklyroutinegymapp.shared.generated.resources.common_deleted
+import myweeklyroutinegymapp.shared.generated.resources.common_done
+import myweeklyroutinegymapp.shared.generated.resources.common_name
+import myweeklyroutinegymapp.shared.generated.resources.common_ok
+import myweeklyroutinegymapp.shared.generated.resources.common_saved
+import myweeklyroutinegymapp.shared.generated.resources.muscle_msg_delete_blocked
+import myweeklyroutinegymapp.shared.generated.resources.muscle_msg_name_blank
+import myweeklyroutinegymapp.shared.generated.resources.muscle_new
+import myweeklyroutinegymapp.shared.generated.resources.muscle_new_group
+import myweeklyroutinegymapp.shared.generated.resources.muscles_add_group
+import myweeklyroutinegymapp.shared.generated.resources.muscles_empty
+import myweeklyroutinegymapp.shared.generated.resources.muscles_empty_hint
+import myweeklyroutinegymapp.shared.generated.resources.muscles_no_leaves
+import myweeklyroutinegymapp.shared.generated.resources.muscles_title
+import myweeklyroutinegymapp.shared.generated.resources.plural_session_entries
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
@@ -79,10 +101,10 @@ fun MuscleCatalogContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Muscles", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(Res.string.muscles_title), style = MaterialTheme.typography.headlineSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { addGroupOpen = true }) { Text("Add group") }
-                TextButton(onClick = onBack) { Text("Done") }
+                Button(onClick = { addGroupOpen = true }) { Text(stringResource(Res.string.muscles_add_group)) }
+                TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
             }
         }
 
@@ -90,14 +112,16 @@ fun MuscleCatalogContent(
 
         if (state.isEmpty) {
             EmptyState(
-                text = "No muscle groups yet.",
-                hint = "Add a group such as Chest, then leaves inside it. " +
-                    "A \"General\" leaf lets you log the whole group at once.",
+                text = stringResource(Res.string.muscles_empty),
+                hint = stringResource(Res.string.muscles_empty_hint),
             )
             return@Column
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(state.groups, key = { it.id }) { group ->
                 val muscles = state.musclesByGroup[group.id].orEmpty()
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -116,8 +140,12 @@ fun MuscleCatalogContent(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Row {
-                                TextButton(onClick = { addMuscleToGroup = group.id }) { Text("Add") }
-                                TextButton(onClick = { onDeleteGroup(group.id) }) { Text("Delete") }
+                                TextButton(onClick = { addMuscleToGroup = group.id }) {
+                                    Text(stringResource(Res.string.common_add))
+                                }
+                                TextButton(onClick = { onDeleteGroup(group.id) }) {
+                                    Text(stringResource(Res.string.common_delete))
+                                }
                             }
                         }
 
@@ -125,7 +153,7 @@ fun MuscleCatalogContent(
                             // A group with no leaves cannot be logged against — the
                             // session always points at a leaf, never at a group.
                             Text(
-                                "No leaves yet — add one before logging this group.",
+                                stringResource(Res.string.muscles_no_leaves),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -140,10 +168,10 @@ fun MuscleCatalogContent(
                                 Text(muscle.name, style = MaterialTheme.typography.bodyLarge)
                                 Row {
                                     TextButton(onClick = { onArchiveMuscle(muscle.id, true) }) {
-                                        Text("Archive")
+                                        Text(stringResource(Res.string.common_archive))
                                     }
                                     TextButton(onClick = { onDeleteMuscle(muscle.id) }) {
-                                        Text("Delete")
+                                        Text(stringResource(Res.string.common_delete))
                                     }
                                 }
                             }
@@ -156,7 +184,7 @@ fun MuscleCatalogContent(
 
     if (addGroupOpen) {
         NameDialog(
-            title = "New muscle group",
+            title = stringResource(Res.string.muscle_new_group),
             onDismiss = { addGroupOpen = false },
             onConfirm = {
                 onAddGroup(it)
@@ -167,7 +195,7 @@ fun MuscleCatalogContent(
 
     addMuscleToGroup?.let { groupId ->
         NameDialog(
-            title = "New muscle",
+            title = stringResource(Res.string.muscle_new),
             onDismiss = { addMuscleToGroup = null },
             onConfirm = {
                 onAddMuscle(groupId, it)
@@ -191,24 +219,33 @@ private fun NameDialog(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Name") },
+                label = { Text(stringResource(Res.string.common_name)) },
                 singleLine = true,
             )
         },
-        confirmButton = { TextButton(onClick = { onConfirm(name) }) { Text("Add") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }) { Text(stringResource(Res.string.common_add)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
+        },
     )
 }
 
 @Composable
 private fun MessageBanner(message: MuscleCatalogMessage, onDismiss: () -> Unit) {
     val text = when (message) {
-        MuscleCatalogMessage.Saved -> "Saved."
-        MuscleCatalogMessage.Deleted -> "Deleted."
-        MuscleCatalogMessage.BlankName -> "Give it a name."
-        is MuscleCatalogMessage.DeleteBlocked ->
-            "Cannot delete: ${message.referenceCount} session entry/entries reference it. " +
-                "Archive it instead to keep its history."
+        MuscleCatalogMessage.Saved -> stringResource(Res.string.common_saved)
+        MuscleCatalogMessage.Deleted -> stringResource(Res.string.common_deleted)
+        MuscleCatalogMessage.BlankName -> stringResource(Res.string.muscle_msg_name_blank)
+        is MuscleCatalogMessage.DeleteBlocked -> stringResource(
+            Res.string.muscle_msg_delete_blocked,
+            pluralStringResource(
+                Res.plurals.plural_session_entries,
+                message.referenceCount.toInt(),
+                message.referenceCount.toString(),
+            ),
+        )
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -218,7 +255,7 @@ private fun MessageBanner(message: MuscleCatalogMessage, onDismiss: () -> Unit) 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text("OK") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
         }
     }
 }

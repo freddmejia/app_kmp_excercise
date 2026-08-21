@@ -10,7 +10,9 @@ import botix.dev.myweeklyroutinegymapp.db.GymDatabase
 import botix.dev.myweeklyroutinegymapp.domain.model.DailyVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
+import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals
 import botix.dev.myweeklyroutinegymapp.domain.model.UntrainedMuscle
 import botix.dev.myweeklyroutinegymapp.domain.model.WorkoutSession
@@ -29,6 +31,10 @@ class WorkoutRepositoryImpl(
 
     override fun observeSessionsInRange(fromEpochDay: Long, toEpochDay: Long): Flow<List<WorkoutSession>> =
         queries.selectSessionsInRange(fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
+            .map { rows -> rows.map { it.toDomain() } }
+
+    override fun observeDaySummaries(epochDay: Long): Flow<List<SessionSummary>> =
+        queries.selectDaySummaries(epochDay).asFlow().mapToList(dispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
     override fun observeSession(id: Long): Flow<WorkoutSession?> =
@@ -66,8 +72,14 @@ class WorkoutRepositoryImpl(
     override suspend fun updateNotes(sessionId: Long, notes: String?): Unit =
         withContext(dispatcher) { queries.updateSessionNotes(notes, sessionId) }
 
-    override suspend fun deleteSession(id: Long): Unit =
-        withContext(dispatcher) { queries.deleteSession(id) }
+    override suspend fun deleteSession(id: Long): Unit = withContext(dispatcher) {
+        // Entries first, in the same transaction, rather than relying on the FK's
+        // ON DELETE CASCADE — that action depends on a driver-level pragma.
+        db.transaction {
+            queries.deleteEntriesForSession(id)
+            queries.deleteSession(id)
+        }
+    }
 
     override suspend fun addSets(
         sessionId: Long,
@@ -105,6 +117,13 @@ class WorkoutRepositoryImpl(
 
     override fun observeVolumePerMuscle(fromEpochDay: Long, toEpochDay: Long): Flow<List<MuscleVolume>> =
         queries.volumePerMuscleInRange(fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
+            .map { rows -> rows.map { it.toDomain() } }
+
+    override fun observeVolumePerActivity(
+        fromEpochDay: Long,
+        toEpochDay: Long,
+    ): Flow<List<ActivityVolume>> =
+        queries.volumePerActivityInRange(fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
     override fun observeVolumePerGroup(fromEpochDay: Long, toEpochDay: Long): Flow<List<GroupVolume>> =

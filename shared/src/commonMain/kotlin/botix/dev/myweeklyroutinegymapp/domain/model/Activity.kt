@@ -13,6 +13,8 @@ data class Activity(
     val measurementType: MeasurementType,
     val icon: String? = null,
     val color: String? = null,
+    /** Optional [ActivityCategory]; null means uncategorised, which is a normal state. */
+    val categoryId: Long? = null,
     val isArchived: Boolean = false,
     val isSeed: Boolean = false,
     /** Epoch millis. Used for a stable "recently created" ordering. */

@@ -5,6 +5,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 /**
  * Exercises the schema against a real in-memory SQLite, so the integrity rules the
@@ -12,16 +13,21 @@ import kotlin.test.assertFailsWith
  */
 class GymDatabaseSchemaTest {
 
+    /** Kept so a test can reach the connection for a PRAGMA; see the FK test below. */
+    private val drivers = mutableMapOf<GymDatabase, JdbcSqliteDriver>()
+
     private fun newDb(): GymDatabase {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         GymDatabase.Schema.create(driver)
-        return createDatabase(driver)
+        return createDatabase(driver).also { drivers[it] = driver }
     }
+
+    private fun driverOf(db: GymDatabase): JdbcSqliteDriver = drivers.getValue(db)
 
     @Test
     fun measurementTypeRoundTripsAsEnum() {
         val db = newDb()
-        db.activityQueries.insert("Running", MeasurementType.DISTANCE_TIME, "run", "#FF0000", false, 0L)
+        db.activityQueries.insert("Running", MeasurementType.DISTANCE_TIME, "run", "#FF0000", null, false, 0L)
         val stored = db.activityQueries.selectAll().executeAsOne()
         assertEquals(MeasurementType.DISTANCE_TIME, stored.measurement_type)
         assertEquals(false, stored.is_archived)
@@ -30,14 +36,44 @@ class GymDatabaseSchemaTest {
     @Test
     fun activeActivityNamesAreUniqueButArchivedOnesAreExempt() {
         val db = newDb()
-        db.activityQueries.insert("Running", MeasurementType.SIMPLE, null, null, false, 0L)
+        db.activityQueries.insert("Running", MeasurementType.SIMPLE, null, null, null, false, 0L)
         assertFailsWith<Exception> {
-            db.activityQueries.insert("Running", MeasurementType.SIMPLE, null, null, false, 0L)
+            db.activityQueries.insert("Running", MeasurementType.SIMPLE, null, null, null, false, 0L)
         }
         // Archiving the first frees the name — history keeps the archived row.
         db.activityQueries.setArchived(true, 1L)
-        db.activityQueries.insert("Running", MeasurementType.SIMPLE, null, null, false, 1L)
+        db.activityQueries.insert("Running", MeasurementType.SIMPLE, null, null, null, false, 1L)
         assertEquals(2, db.activityQueries.selectAll().executeAsList().size)
+    }
+
+    @Test
+    fun activeCategoryNamesAreUniqueButArchivedOnesAreExempt() {
+        val db = newDb()
+        db.activityCategoryQueries.insert("Cardio", null, null, 0L)
+        assertFailsWith<Exception> { db.activityCategoryQueries.insert("Cardio", null, null, 0L) }
+
+        db.activityCategoryQueries.setArchived(true, 1L)
+        db.activityCategoryQueries.insert("Cardio", null, null, 1L)
+        assertEquals(2, db.activityCategoryQueries.selectAll().executeAsList().size)
+    }
+
+    @Test
+    fun theCategoryForeignKeyNullsOutRatherThanCascading() {
+        val db = newDb()
+        // Foreign keys are off by default in this driver, so the ON DELETE action is
+        // enabled explicitly here. Production has it on for real: the Android driver
+        // issues PRAGMA foreign_keys=ON and the native one sets foreignKeyConstraints.
+        driverOf(db).execute(null, "PRAGMA foreign_keys=ON;", 0)
+        db.activityCategoryQueries.insert("Cardio", null, null, 0L)
+        db.activityQueries.insert("Running", MeasurementType.DISTANCE_TIME, null, null, 1L, false, 0L)
+
+        db.activityCategoryQueries.deleteById(1L)
+
+        // SET NULL, not CASCADE: losing a label must never delete the activity, which
+        // owns sessions and would take their history with it.
+        val stored = db.activityQueries.selectAll().executeAsOne()
+        assertEquals("Running", stored.name)
+        assertNull(stored.category_id)
     }
 
     @Test
@@ -53,7 +89,7 @@ class GymDatabaseSchemaTest {
     @Test
     fun sessionMuscleSumsInsteadOfDuplicating() {
         val db = newDb()
-        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, false, 0L)
+        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, null, false, 0L)
         db.muscleCatalogQueries.insertGroup("Chest", 0L)
         db.muscleCatalogQueries.insertMuscle(1L, "Upper chest", 0L)
         db.workoutSessionQueries.insertSession(1L, 20_000L, null, 0L)
@@ -72,7 +108,7 @@ class GymDatabaseSchemaTest {
     @Test
     fun effectiveSetsMustBeAtLeastOne() {
         val db = newDb()
-        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, false, 0L)
+        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, null, false, 0L)
         db.muscleCatalogQueries.insertGroup("Back", 0L)
         db.muscleCatalogQueries.insertMuscle(1L, "General", 0L)
         db.workoutSessionQueries.insertSession(1L, 20_000L, null, 0L)
@@ -82,7 +118,7 @@ class GymDatabaseSchemaTest {
     @Test
     fun groupVolumeAggregatesAllItsLeaves() {
         val db = newDb()
-        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, false, 0L)
+        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, null, false, 0L)
         db.muscleCatalogQueries.insertGroup("Chest", 0L)
         db.muscleCatalogQueries.insertMuscle(1L, "Upper chest", 0L)
         db.muscleCatalogQueries.insertMuscle(1L, "General", 0L)
@@ -98,7 +134,7 @@ class GymDatabaseSchemaTest {
     @Test
     fun untrainedMusclesSurfaceWithZeroVolume() {
         val db = newDb()
-        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, false, 0L)
+        db.activityQueries.insert("Gym", MeasurementType.STRENGTH, null, null, null, false, 0L)
         db.muscleCatalogQueries.insertGroup("Legs", 0L)
         db.muscleCatalogQueries.insertMuscle(1L, "Quads", 0L)
         db.muscleCatalogQueries.insertMuscle(1L, "Hamstrings", 0L)

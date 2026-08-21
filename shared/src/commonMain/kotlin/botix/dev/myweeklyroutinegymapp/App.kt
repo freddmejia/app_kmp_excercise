@@ -15,10 +15,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogScreen
+import myweeklyroutinegymapp.shared.generated.resources.Res
+import myweeklyroutinegymapp.shared.generated.resources.tab_activities
+import myweeklyroutinegymapp.shared.generated.resources.tab_log
+import myweeklyroutinegymapp.shared.generated.resources.tab_weight
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The three feature screens, one per top-level tab.
@@ -27,10 +34,10 @@ import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogScreen
  * arguments and no deep links, so a nav graph would add a dependency and a back stack
  * that nothing here needs. Introduce one when a screen gains a detail route.
  */
-private enum class Destination(val label: String, val symbol: String) {
-    WORKOUT("Log", "🏋"),
-    ACTIVITIES("Activities", "📋"),
-    WEIGHT("Weight", "⚖"),
+private enum class Destination(val label: StringResource, val symbol: String) {
+    WORKOUT(Res.string.tab_log, "🏋"),
+    ACTIVITIES(Res.string.tab_activities, "📋"),
+    WEIGHT(Res.string.tab_weight, "⚖"),
 }
 
 /**
@@ -53,6 +60,9 @@ fun App() {
         // The muscle catalogue is a detail of the Log tab, not a peer of it, so it
         // is a flag on that tab rather than a fourth destination.
         var showMuscleCatalog by rememberSaveable { mutableStateOf(false) }
+        // Same shape for categories on the Activities tab: a catalogue that edits
+        // one field of the screen behind it, not a destination of its own.
+        var showCategories by rememberSaveable { mutableStateOf(false) }
         val destination = Destination.entries[selectedIndex]
 
         Scaffold(
@@ -64,7 +74,7 @@ fun App() {
                             selected = index == selectedIndex,
                             onClick = { selectedIndex = index },
                             icon = { Text(entry.symbol) },
-                            label = { Text(entry.label) },
+                            label = { Text(stringResource(entry.label)) },
                         )
                     }
                 }
@@ -78,7 +88,12 @@ fun App() {
                         } else {
                             WorkoutLogScreen(onManageMuscles = { showMuscleCatalog = true })
                         }
-                    Destination.ACTIVITIES -> ActivityListScreen()
+                    Destination.ACTIVITIES ->
+                        if (showCategories) {
+                            ActivityCategoryScreen(onBack = { showCategories = false })
+                        } else {
+                            ActivityListScreen(onManageCategories = { showCategories = true })
+                        }
                     Destination.WEIGHT -> BodyWeightScreen()
                 }
             }

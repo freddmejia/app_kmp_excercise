@@ -65,6 +65,10 @@ class MuscleCatalogRepositoryImpl(
             if (referencing > 0) {
                 DeleteOutcome.BlockedByHistory(referencing)
             } else {
+                // Before the leaves go, so no activity keeps a link to a muscle that
+                // no longer exists. Explicit for the same reason as everywhere else:
+                // ON DELETE CASCADE depends on a driver-level pragma.
+                db.activityMuscleQueries.deleteAllForGroup(id)
                 queries.deleteGroup(id)
                 DeleteOutcome.Deleted
             }
@@ -91,6 +95,7 @@ class MuscleCatalogRepositoryImpl(
             if (referencing > 0) {
                 DeleteOutcome.BlockedByHistory(referencing)
             } else {
+                db.activityMuscleQueries.deleteAllForMuscle(id)
                 queries.deleteMuscle(id)
                 DeleteOutcome.Deleted
             }

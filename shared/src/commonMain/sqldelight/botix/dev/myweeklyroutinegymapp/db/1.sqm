@@ -1,0 +1,30 @@
+-- Schema 1 -> 2: user-manageable activity categories.
+--
+-- This file is what upgrades a database that already exists on a device. Without
+-- it, an installed app keeps reporting version 1, the new table is never created,
+-- and the first category query crashes with "no such table". A fresh install does
+-- not run this — Schema.create() builds the current .sq schema directly — so the
+-- two paths must agree, which is why the DDL below mirrors ActivityCategory.sq and
+-- the added column exactly.
+
+CREATE TABLE activity_category (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    icon        TEXT,
+    color       TEXT,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX activity_category_active_name_unique
+ON activity_category(name) WHERE is_archived = 0;
+
+CREATE INDEX activity_category_archived_idx ON activity_category(is_archived);
+
+-- SQLite permits a REFERENCES clause on ADD COLUMN only when the new column
+-- defaults to NULL. That is what we want anyway: every existing activity starts
+-- uncategorised.
+ALTER TABLE activity ADD COLUMN category_id INTEGER DEFAULT NULL
+    REFERENCES activity_category(id) ON DELETE SET NULL;
+
+CREATE INDEX activity_category_idx ON activity(category_id);

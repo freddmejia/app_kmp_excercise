@@ -1,15 +1,19 @@
 package botix.dev.myweeklyroutinegymapp.data.mapper
 
 import botix.dev.myweeklyroutinegymapp.db.DailyVolumeForMuscle
+import botix.dev.myweeklyroutinegymapp.db.SelectDaySummaries
 import botix.dev.myweeklyroutinegymapp.db.SelectEntriesForSession
 import botix.dev.myweeklyroutinegymapp.db.UntrainedMusclesInRange
+import botix.dev.myweeklyroutinegymapp.db.VolumePerActivityInRange
 import botix.dev.myweeklyroutinegymapp.db.VolumePerGroupInRange
 import botix.dev.myweeklyroutinegymapp.db.VolumePerMuscleInRange
 import botix.dev.myweeklyroutinegymapp.db.Workout_session
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.DailyVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
+import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.UntrainedMuscle
 import botix.dev.myweeklyroutinegymapp.domain.model.WorkoutSession
 import botix.dev.myweeklyroutinegymapp.db.SessionTotals as SessionTotalsRow
@@ -70,4 +74,23 @@ internal fun UntrainedMusclesInRange.toDomain(): UntrainedMuscle = UntrainedMusc
 internal fun DailyVolumeForMuscle.toDomain(): DailyVolume = DailyVolume(
     epochDay = date_epoch_day,
     effectiveSets = effective_sets,
+)
+
+internal fun SelectDaySummaries.toDomain(): SessionSummary = SessionSummary(
+    sessionId = id,
+    activityId = activity_id,
+    activityName = activity_name,
+    epochDay = date_epoch_day,
+    notes = notes,
+    effectiveSets = effective_sets,
+    warmupSets = warmup_sets,
+    muscleCount = muscle_count,
+)
+
+internal fun VolumePerActivityInRange.toDomain(): ActivityVolume = ActivityVolume(
+    activityId = activity_id,
+    effectiveSets = effective_sets,
+    warmupSets = warmup_sets,
+    distinctDays = distinct_days,
+    sessionCount = session_count,
 )

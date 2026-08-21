@@ -10,6 +10,10 @@ CREATE TABLE activity (
     measurement_type TEXT AS MeasurementType NOT NULL,
     icon             TEXT,
     color            TEXT,
+    -- Optional, user-owned grouping. ON DELETE SET NULL: removing a category
+    -- uncategorises its activities instead of deleting them, which is why the
+    -- delete is unrestricted (see ActivityCategory.sq).
+    category_id      INTEGER REFERENCES activity_category(id) ON DELETE SET NULL,
     is_archived      INTEGER AS Boolean NOT NULL DEFAULT 0,
     is_seed          INTEGER AS Boolean NOT NULL DEFAULT 0,
     created_at       INTEGER NOT NULL
@@ -20,6 +24,8 @@ CREATE TABLE activity (
 CREATE UNIQUE INDEX activity_active_name_unique ON activity(name) WHERE is_archived = 0;
 
 CREATE INDEX activity_archived_idx ON activity(is_archived);
+
+CREATE INDEX activity_category_idx ON activity(category_id);
 
 selectAll:
 SELECT * FROM activity ORDER BY name ASC;
@@ -53,13 +59,24 @@ countActiveWithName:
 SELECT COUNT(*) FROM activity WHERE is_archived = 0 AND name = :name AND id != :excludingId;
 
 insert:
-INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at)
-VALUES (?, ?, ?, ?, 0, ?, ?);
+INSERT INTO activity (name, measurement_type, icon, color, category_id, is_archived, is_seed, created_at)
+VALUES (?, ?, ?, ?, ?, 0, ?, ?);
 
 -- Identity only. measurement_type is deliberately absent: changing it with
 -- sessions on record would strand that data in an incompatible model.
 updateIdentity:
-UPDATE activity SET name = ?, icon = ?, color = ? WHERE id = ?;
+UPDATE activity SET name = ?, icon = ?, color = ?, category_id = ? WHERE id = ?;
+
+-- Reassigning from a list row, where the form's other fields are not in hand.
+-- NULL moves the activity back to uncategorised.
+setCategory:
+UPDATE activity SET category_id = ? WHERE id = ?;
+
+-- Called when a category is archived rather than deleted: archiving hides it from
+-- the pickers, so leaving activities pointing at an invisible category would strand
+-- them in a filter nothing can select.
+clearCategory:
+UPDATE activity SET category_id = NULL WHERE category_id = ?;
 
 -- Only legal while countSessionsFor() = 0; enforce in the repository.
 updateMeasurementType:

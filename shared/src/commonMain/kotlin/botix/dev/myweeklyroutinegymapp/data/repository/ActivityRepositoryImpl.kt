@@ -48,6 +48,7 @@ class ActivityRepositoryImpl(
         measurementType: MeasurementType,
         icon: String?,
         color: String?,
+        categoryId: Long?,
         isSeed: Boolean,
         createdAt: Long,
     ): Long = withContext(dispatcher) {
@@ -55,13 +56,21 @@ class ActivityRepositoryImpl(
         // connection-scoped, so a concurrent write between the two could otherwise
         // hand back somebody else's id.
         db.transactionWithResult {
-            queries.insert(name, measurementType, icon, color, isSeed, createdAt)
+            queries.insert(name, measurementType, icon, color, categoryId, isSeed, createdAt)
             queries.lastInsertRowId().executeAsOne()
         }
     }
 
-    override suspend fun updateIdentity(id: Long, name: String, icon: String?, color: String?): Unit =
-        withContext(dispatcher) { queries.updateIdentity(name, icon, color, id) }
+    override suspend fun updateIdentity(
+        id: Long,
+        name: String,
+        icon: String?,
+        color: String?,
+        categoryId: Long?,
+    ): Unit = withContext(dispatcher) { queries.updateIdentity(name, icon, color, categoryId, id) }
+
+    override suspend fun setCategory(id: Long, categoryId: Long?): Unit =
+        withContext(dispatcher) { queries.setCategory(categoryId, id) }
 
     override suspend fun changeMeasurementType(
         id: Long,
@@ -89,6 +98,10 @@ class ActivityRepositoryImpl(
             if (sessions > 0) {
                 DeleteOutcome.BlockedByHistory(sessions)
             } else {
+                // Same transaction, and explicit rather than trusting the table's
+                // ON DELETE CASCADE: that action only fires while PRAGMA foreign_keys
+                // is on, which is a per-driver setting.
+                db.activityMuscleQueries.deleteAllForActivity(id)
                 queries.deleteById(id)
                 DeleteOutcome.Deleted
             }

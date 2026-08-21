@@ -3,7 +3,9 @@ package botix.dev.myweeklyroutinegymapp.domain.repository
 import botix.dev.myweeklyroutinegymapp.domain.model.DailyVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
+import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals
 import botix.dev.myweeklyroutinegymapp.domain.model.UntrainedMuscle
 import botix.dev.myweeklyroutinegymapp.domain.model.WorkoutSession
@@ -18,6 +20,9 @@ import kotlinx.coroutines.flow.Flow
 interface WorkoutRepository {
 
     fun observeSessionsInRange(fromEpochDay: Long, toEpochDay: Long): Flow<List<WorkoutSession>>
+
+    /** Every session logged on one day, with its activity name and totals. */
+    fun observeDaySummaries(epochDay: Long): Flow<List<SessionSummary>>
 
     fun observeSession(id: Long): Flow<WorkoutSession?>
 
@@ -64,6 +69,9 @@ interface WorkoutRepository {
     fun observeVolumePerMuscle(fromEpochDay: Long, toEpochDay: Long): Flow<List<MuscleVolume>>
 
     fun observeVolumePerGroup(fromEpochDay: Long, toEpochDay: Long): Flow<List<GroupVolume>>
+
+    /** Per-activity totals over a window; activities with no session are absent. */
+    fun observeVolumePerActivity(fromEpochDay: Long, toEpochDay: Long): Flow<List<ActivityVolume>>
 
     /** Which muscles went untouched in the window — the "what am I neglecting" read. */
     fun observeUntrainedMuscles(fromEpochDay: Long, toEpochDay: Long): Flow<List<UntrainedMuscle>>

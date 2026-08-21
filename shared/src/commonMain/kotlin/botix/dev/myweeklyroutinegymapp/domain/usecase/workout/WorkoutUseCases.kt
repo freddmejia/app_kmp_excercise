@@ -6,7 +6,9 @@ import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionDetail
+import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals
 import botix.dev.myweeklyroutinegymapp.domain.model.UntrainedMuscle
 import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityRepository
@@ -116,12 +118,10 @@ class ObserveSessionDetailUseCase(private val workouts: WorkoutRepository) {
  * `groupBy` on a `List` keeps first-seen order, which is what makes this safe.
  */
 class ObserveMusclePickerUseCase(private val catalog: MuscleCatalogRepository) {
-    operator fun invoke(): Flow<List<MuscleSection>> = catalog.observePicker().map { items ->
-        items.groupBy { it.groupId to it.groupName }
-            .map { (group, muscles) ->
-                MuscleSection(groupId = group.first, groupName = group.second, muscles = muscles)
-            }
-    }
+    // Grouping lives in toSections(), shared with the activity-scoped picker, so the
+    // two cannot drift into different orderings of the same catalogue.
+    operator fun invoke(): Flow<List<MuscleSection>> =
+        catalog.observePicker().map { it.toSections() }
 }
 
 /** Volume per group over a window; the default window is the trailing week. */
@@ -136,6 +136,18 @@ class ObserveGroupVolumeUseCase(
 
     operator fun invoke(fromEpochDay: Long, toEpochDay: Long): Flow<List<GroupVolume>> =
         workouts.observeVolumePerGroup(fromEpochDay, toEpochDay)
+}
+
+/**
+ * Per-activity volume over an explicit range — the Activities screen's week.
+ *
+ * Takes the range rather than a trailing window because the screen navigates to
+ * arbitrary weeks, including future ones. A "last N days" shape could not express
+ * the week the user is actually looking at.
+ */
+class ObserveActivityVolumeUseCase(private val workouts: WorkoutRepository) {
+    operator fun invoke(fromEpochDay: Long, toEpochDay: Long): Flow<List<ActivityVolume>> =
+        workouts.observeVolumePerActivity(fromEpochDay, toEpochDay)
 }
 
 /** Volume per individual muscle over a window. */
@@ -154,10 +166,55 @@ class ObserveUntrainedMusclesUseCase(
     private val workouts: WorkoutRepository,
     private val clock: Clock,
 ) {
-    operator fun invoke(windowDays: Long = 7): Flow<List<UntrainedMuscle>> {
-        val today = clock.today()
-        return workouts.observeUntrainedMuscles(today - windowDays + 1, today)
-    }
+    /**
+     * [endDay] closes the window, defaulting to today.
+     *
+     * Parameterised so the log screen can anchor it to the day being viewed: while
+     * you are looking at last Tuesday, "not trained in the last 7 days" means the
+     * week up to that Tuesday. Measured against today it would describe a week the
+     * screen is not showing.
+     */
+    operator fun invoke(
+        windowDays: Long = 7,
+        endDay: Long = clock.today(),
+    ): Flow<List<UntrainedMuscle>> =
+        workouts.observeUntrainedMuscles(endDay - windowDays + 1, endDay)
+}
+
+/**
+ * Which days in a range already have a session, for the day strip's markers.
+ *
+ * Any activity, not just the selected one: the marker answers "did I train that
+ * day", which is the question you are asking while scanning dates for one to open.
+ */
+class ObserveSessionDaysUseCase(private val workouts: WorkoutRepository) {
+    operator fun invoke(fromEpochDay: Long, toEpochDay: Long): Flow<Set<Long>> =
+        workouts.observeSessionsInRange(fromEpochDay, toEpochDay)
+            .map { sessions -> sessions.map { it.epochDay }.toSet() }
+}
+
+/**
+ * Everything logged on one day, for the day view's list.
+ *
+ * A day can hold more than one session — different activities, or a morning and an
+ * evening — so this is a list, not the single "current session" the screen used to
+ * assume.
+ */
+class ObserveDayLogUseCase(private val workouts: WorkoutRepository) {
+    operator fun invoke(epochDay: Long): Flow<List<SessionSummary>> =
+        workouts.observeDaySummaries(epochDay)
+}
+
+/**
+ * Removes a whole session and the entries under it.
+ *
+ * Necessary once creating a log is an explicit act: starting one and changing your
+ * mind leaves a real row, and without this it would sit in the day list forever
+ * counting toward every frequency metric. `session_muscle` cascades from
+ * `workout_session`, so its entries go with it.
+ */
+class DeleteSessionUseCase(private val workouts: WorkoutRepository) {
+    suspend operator fun invoke(sessionId: Long) = workouts.deleteSession(sessionId)
 }
 
 /**

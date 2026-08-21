@@ -13,6 +13,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import myweeklyroutinegymapp.shared.generated.resources.Res
+import myweeklyroutinegymapp.shared.generated.resources.chart_one_measurement
+import org.jetbrains.compose.resources.stringResource
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightChart
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightPoint
 
@@ -41,7 +44,7 @@ fun WeightChart(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "One measurement — no line yet.",
+                stringResource(Res.string.chart_one_measurement),
                 style = MaterialTheme.typography.bodySmall,
                 color = pointColor,
             )

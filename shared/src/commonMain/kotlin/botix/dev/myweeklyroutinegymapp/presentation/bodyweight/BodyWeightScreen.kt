@@ -26,12 +26,49 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import myweeklyroutinegymapp.shared.generated.resources.Res
+import myweeklyroutinegymapp.shared.generated.resources.common_all
+import myweeklyroutinegymapp.shared.generated.resources.common_delete
+import myweeklyroutinegymapp.shared.generated.resources.common_deleted
+import myweeklyroutinegymapp.shared.generated.resources.common_ok
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_logged
+import myweeklyroutinegymapp.shared.generated.resources.weight_already
+import myweeklyroutinegymapp.shared.generated.resources.weight_change
+import myweeklyroutinegymapp.shared.generated.resources.weight_change_percent
+import myweeklyroutinegymapp.shared.generated.resources.weight_empty
+import myweeklyroutinegymapp.shared.generated.resources.weight_empty_hint
+import myweeklyroutinegymapp.shared.generated.resources.weight_future
+import myweeklyroutinegymapp.shared.generated.resources.weight_history
+import myweeklyroutinegymapp.shared.generated.resources.weight_input_label
+import myweeklyroutinegymapp.shared.generated.resources.weight_kg
+import myweeklyroutinegymapp.shared.generated.resources.weight_log
+import myweeklyroutinegymapp.shared.generated.resources.weight_mode_daily
+import myweeklyroutinegymapp.shared.generated.resources.weight_mode_monthly
+import myweeklyroutinegymapp.shared.generated.resources.weight_msg_invalid
+import myweeklyroutinegymapp.shared.generated.resources.weight_no_data
+import myweeklyroutinegymapp.shared.generated.resources.weight_one_per_day
+import myweeklyroutinegymapp.shared.generated.resources.weight_preset_days
+import myweeklyroutinegymapp.shared.generated.resources.weight_rate
+import myweeklyroutinegymapp.shared.generated.resources.weight_replace
+import myweeklyroutinegymapp.shared.generated.resources.weight_samples
+import myweeklyroutinegymapp.shared.generated.resources.weight_title
+import myweeklyroutinegymapp.shared.generated.resources.weight_trend_falling
+import myweeklyroutinegymapp.shared.generated.resources.weight_trend_insufficient
+import myweeklyroutinegymapp.shared.generated.resources.weight_trend_rising
+import myweeklyroutinegymapp.shared.generated.resources.weight_trend_stable
+import myweeklyroutinegymapp.shared.generated.resources.plural_measurements
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightEntry
+import botix.dev.myweeklyroutinegymapp.domain.model.ChartMode
 import botix.dev.myweeklyroutinegymapp.domain.model.WeightTrend
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.BodyWeightRangePreset
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
+import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
 import botix.dev.myweeklyroutinegymapp.presentation.common.signed1
 import org.koin.compose.viewmodel.koinViewModel
@@ -53,6 +90,9 @@ fun BodyWeightScreen(
         state = state,
         onSelectPreset = viewModel::selectPreset,
         onLog = { weight -> viewModel.log(weight) },
+        onSelectDay = viewModel::selectDay,
+        onStepWeek = viewModel::stepWeek,
+        onGoToToday = viewModel::goToToday,
         onDelete = viewModel::delete,
         onConsumeMessage = viewModel::consumeMessage,
         modifier = modifier,
@@ -68,6 +108,9 @@ fun BodyWeightContent(
     state: BodyWeightUiState,
     onSelectPreset: (BodyWeightRangePreset) -> Unit,
     onLog: (Double?) -> Unit,
+    onSelectDay: (Long) -> Unit,
+    onStepWeek: (Boolean) -> Unit,
+    onGoToToday: () -> Unit,
     onDelete: (Long) -> Unit,
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
@@ -81,22 +124,61 @@ fun BodyWeightContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Body weight", style = MaterialTheme.typography.headlineSmall)
+        // Pinned header: the title and the two filters. They say what you are looking
+        // at and control it, so scrolling them away would leave the content below
+        // unattributed — the strip in particular is what the readings belong to.
+        Text(stringResource(Res.string.weight_title), style = MaterialTheme.typography.headlineSmall)
 
-        SummaryCard(state)
-        WeightChart(state.chart)
+        // The strip picks the day a reading belongs to. The presets are the chart's
+        // own range: a week is the unit you *log* in, months are the unit you read a
+        // trend in, and collapsing the two would cost the trend its point.
+        WeekStrip(
+            selectedDay = state.selectedDay,
+            today = state.today,
+            visibleDays = state.visibleDays,
+            markedDays = state.daysWithEntry,
+            onSelectDay = onSelectDay,
+            onStepWeek = onStepWeek,
+            onGoToToday = onGoToToday,
+        )
         PresetRow(state.preset, onSelectPreset)
-        WeightInput(onLog)
 
-        state.message?.let { MessageBanner(it, onConsumeMessage) }
+        // weight(1f), not "whatever is left over": a plain nested list is measured
+        // with the remaining constraints and collapses to nothing once the header
+        // grows — which is exactly what adding the strip did to the history here.
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(key = "input") {
+                WeightInput(
+                    selectedDay = state.selectedDay,
+                    existing = state.entryForSelectedDay,
+                    isFuture = state.selectedDayIsFuture,
+                    onLog = onLog,
+                )
+            }
 
-        if (state.history.isEmpty()) {
-            EmptyState(
-                text = "No measurements in this range.",
-                hint = "One reading per day — logging the same day again replaces it.",
-            )
-        } else {
-            HistoryList(state.history, onDelete)
+            state.message?.let { message ->
+                item(key = "message") { MessageBanner(message, onConsumeMessage) }
+            }
+
+            item(key = "summary") { SummaryCard(state) }
+            item(key = "chart") { WeightChart(state.chart) }
+
+            if (state.history.isEmpty()) {
+                item(key = "empty") {
+                    EmptyState(
+                        text = stringResource(Res.string.weight_empty),
+                        hint = stringResource(Res.string.weight_empty_hint),
+                    )
+                }
+            } else {
+                item(key = "history-header") { SectionHeader(stringResource(Res.string.weight_history)) }
+                items(state.history, key = { it.id }) { entry ->
+                    HistoryRow(entry, onDelete)
+                }
+            }
         }
     }
 }
@@ -110,7 +192,8 @@ private fun SummaryCard(state: BodyWeightUiState) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = summary.currentKg?.let { "${it.format1()} kg" } ?: "No data",
+                text = summary.currentKg?.let { stringResource(Res.string.weight_kg, it.format1()) }
+                    ?: stringResource(Res.string.weight_no_data),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -118,25 +201,50 @@ private fun SummaryCard(state: BodyWeightUiState) {
             // weight, and rendering 0.0 would read as a real measurement.
             summary.changeKg?.let { change ->
                 Text(
-                    "Change: ${change.signed1()} kg" +
-                        (summary.changePercent?.let { " (${it.signed1()}%)" } ?: ""),
+                    stringResource(Res.string.weight_change, change.signed1()) +
+                        (
+                            summary.changePercent
+                                ?.let { stringResource(Res.string.weight_change_percent, it.signed1()) }
+                                ?: ""
+                            ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
             Text(
-                text = when (summary.trend) {
-                    WeightTrend.RISING -> "Trend: rising"
-                    WeightTrend.FALLING -> "Trend: falling"
-                    WeightTrend.STABLE -> "Trend: stable"
-                    WeightTrend.INSUFFICIENT_DATA -> "Trend: not enough data yet"
-                },
+                text = stringResource(
+                    when (summary.trend) {
+                        WeightTrend.RISING -> Res.string.weight_trend_rising
+                        WeightTrend.FALLING -> Res.string.weight_trend_falling
+                        WeightTrend.STABLE -> Res.string.weight_trend_stable
+                        WeightTrend.INSUFFICIENT_DATA -> Res.string.weight_trend_insufficient
+                    },
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             summary.ratePerWeekKg?.let {
-                Text("Rate: ${it.signed1()} kg/week", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(Res.string.weight_rate, it.signed1()),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             Text(
-                "${summary.sampleCount} measurement(s) · ${state.chart.mode.name.lowercase()} view",
+                stringResource(
+                    Res.string.weight_samples,
+                    pluralStringResource(
+                        Res.plurals.plural_measurements,
+                        summary.sampleCount,
+                        summary.sampleCount.toString(),
+                    ),
+                    // The enum name is an English identifier, so it is mapped rather
+                    // than lowercased into the sentence.
+                    stringResource(
+                        if (state.chart.mode == ChartMode.DAILY) {
+                            Res.string.weight_mode_daily
+                        } else {
+                            Res.string.weight_mode_monthly
+                        },
+                    ),
+                ),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -154,75 +262,121 @@ private fun PresetRow(
             FilterChip(
                 selected = preset == selected,
                 onClick = { onSelectPreset(preset) },
-                label = { Text(preset.days?.let { "${it}d" } ?: "All") },
+                label = {
+                    Text(
+                        preset.days?.let { stringResource(Res.string.weight_preset_days, it.toString()) }
+                            ?: stringResource(Res.string.common_all),
+                    )
+                },
             )
         }
     }
 }
 
+/**
+ * The logging form, for whichever day the strip has selected.
+ *
+ * [existing] is what that day already holds. There is one reading per day, so saving
+ * replaces rather than adds — and the warning is rendered from state, before the
+ * button is pressed, instead of being discovered afterwards.
+ */
 @Composable
-private fun WeightInput(onLog: (Double?) -> Unit) {
+private fun WeightInput(
+    selectedDay: Long,
+    existing: BodyWeightEntry?,
+    isFuture: Boolean,
+    onLog: (Double?) -> Unit,
+) {
     var input by remember { mutableStateOf("") }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OutlinedTextField(
-            value = input,
-            onValueChange = { input = it },
-            label = { Text("kg") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.weight(1f),
-        )
-        Button(
-            onClick = {
-                // Unparseable input is handed over as null: the ViewModel already
-                // treats that as invalid, so the screen needs no rule of its own.
-                onLog(input.trim().replace(',', '.').toDoubleOrNull())
-                input = ""
-            },
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Log")
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                label = { Text(stringResource(Res.string.weight_input_label, selectedDay.asFullDate())) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = {
+                    // Unparseable input is handed over as null: the ViewModel already
+                    // treats that as invalid, so the screen needs no rule of its own.
+                    onLog(input.trim().replace(',', '.').toDoubleOrNull())
+                    input = ""
+                },
+                // Disabled, and the use case refuses it too. The control says no
+                // before you press; the domain says no if anything gets past it.
+                enabled = !isFuture,
+            ) {
+                Text(
+                    stringResource(
+                        if (existing == null) Res.string.weight_log else Res.string.weight_replace,
+                    ),
+                )
+            }
         }
+        Text(
+            text = when {
+                isFuture -> stringResource(Res.string.weight_future)
+                existing != null ->
+                    stringResource(Res.string.weight_already, existing.weightKg.format1())
+
+                else -> stringResource(Res.string.weight_one_per_day)
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = when {
+                isFuture -> MaterialTheme.colorScheme.error
+                existing != null -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
     }
 }
 
 @Composable
-private fun HistoryList(entries: List<BodyWeightEntry>, onDelete: (Long) -> Unit) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        items(entries, key = { it.id }) { entry ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text("${entry.weightKg.format1()} kg", style = MaterialTheme.typography.bodyLarge)
-                    entry.note?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                // Unrestricted here, unlike the catalogue deletes: nothing references
-                // a measurement, so removing one cannot corrupt another metric.
-                TextButton(onClick = { onDelete(entry.id) }) { Text("Delete") }
+private fun HistoryRow(entry: BodyWeightEntry, onDelete: (Long) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(
+                stringResource(Res.string.weight_kg, entry.weightKg.format1()),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            // The date was implicit while every reading was "today"; with a
+            // day selector it is the thing that tells two rows apart.
+            Text(
+                entry.epochDay.asFullDate(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            entry.note?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+        // Unrestricted here, unlike the catalogue deletes: nothing references
+        // a measurement, so removing one cannot corrupt another metric.
+        TextButton(onClick = { onDelete(entry.id) }) { Text(stringResource(Res.string.common_delete)) }
     }
 }
 
 @Composable
 private fun MessageBanner(message: BodyWeightMessage, onDismiss: () -> Unit) {
     val text = when (message) {
-        BodyWeightMessage.Logged -> "Logged."
-        BodyWeightMessage.Deleted -> "Deleted."
-        BodyWeightMessage.InvalidWeight -> "Enter a weight greater than zero."
-        is BodyWeightMessage.WillOverwrite ->
-            "That day already has ${message.existing.weightKg.format1()} kg — saving replaces it."
+        BodyWeightMessage.Logged -> stringResource(Res.string.log_msg_logged)
+        BodyWeightMessage.Deleted -> stringResource(Res.string.common_deleted)
+        BodyWeightMessage.InvalidWeight -> stringResource(Res.string.weight_msg_invalid)
+        BodyWeightMessage.FutureDay -> stringResource(Res.string.weight_future)
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -232,7 +386,7 @@ private fun MessageBanner(message: BodyWeightMessage, onDismiss: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text("OK") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
         }
     }
 }

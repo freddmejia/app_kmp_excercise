@@ -35,6 +35,26 @@ SELECT * FROM workout_session
 WHERE date_epoch_day BETWEEN :fromDay AND :toDay
 ORDER BY date_epoch_day DESC, created_at DESC;
 
+-- Everything the day view's cards need, in one row each: which activity, and the
+-- totals, without a follow-up query per session.
+--
+-- LEFT JOIN so a session with nothing checked yet still appears. It has to: it was
+-- created deliberately, and if it were hidden there would be no way to reopen or
+-- delete it, only an invisible row inflating every count that scans sessions.
+selectDaySummaries:
+SELECT ws.id, ws.activity_id, a.name AS activity_name, ws.date_epoch_day, ws.notes,
+       -- CAST because SQLDelight types a bare SUM() as REAL; the rest of the
+       -- schema does the same so set counts stay Long end to end.
+       CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
+       CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
+       COUNT(sm.id) AS muscle_count
+FROM workout_session ws
+JOIN activity a ON a.id = ws.activity_id
+LEFT JOIN session_muscle sm ON sm.session_id = ws.id
+WHERE ws.date_epoch_day = ?
+GROUP BY ws.id
+ORDER BY ws.created_at ASC;
+
 selectSessionByActivityAndDay:
 SELECT * FROM workout_session WHERE activity_id = ? AND date_epoch_day = ?;
 
@@ -49,6 +69,13 @@ UPDATE workout_session SET notes = ? WHERE id = ?;
 -- factory enables it on both platforms).
 deleteSession:
 DELETE FROM workout_session WHERE id = ?;
+
+-- Paired with deleteSession in one transaction. The FK declares ON DELETE CASCADE,
+-- but that only fires while PRAGMA foreign_keys is on — a per-driver setting, true
+-- on both shipping platforms and off in the JDBC driver the tests use. Doing it
+-- explicitly makes the outcome identical everywhere.
+deleteEntriesForSession:
+DELETE FROM session_muscle WHERE session_id = ?;
 
 -- ---------- entries ----------
 
@@ -96,6 +123,25 @@ SELECT CAST(COALESCE(SUM(effective_sets), 0) AS INTEGER) AS total_effective,
 FROM session_muscle WHERE session_id = ?;
 
 -- ---------- metrics (§9 traceability) ----------
+
+-- Volume per activity over a window: what the Activities screen shows for a week.
+--
+-- Only activities with a session in the range come back, which is the filter itself:
+-- absence from this result *is* "not trained that week", so the screen needs no
+-- second query to work out which rows to drop.
+--
+-- distinct_days counts days rather than sessions, so training the same activity twice
+-- in one day reads as one day trained — the frequency question people actually ask.
+volumePerActivityInRange:
+SELECT ws.activity_id,
+       CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
+       CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
+       COUNT(DISTINCT ws.date_epoch_day) AS distinct_days,
+       COUNT(DISTINCT ws.id) AS session_count
+FROM workout_session ws
+LEFT JOIN session_muscle sm ON sm.session_id = ws.id
+WHERE ws.date_epoch_day BETWEEN :fromDay AND :toDay
+GROUP BY ws.activity_id;
 
 -- Volume per muscle over a window: effective sets, and the days it was trained.
 volumePerMuscleInRange:

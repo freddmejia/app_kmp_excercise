@@ -5,27 +5,82 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import myweeklyroutinegymapp.shared.generated.resources.Res
+import myweeklyroutinegymapp.shared.generated.resources.common_cancel
+import myweeklyroutinegymapp.shared.generated.resources.common_close
+import myweeklyroutinegymapp.shared.generated.resources.common_delete
+import myweeklyroutinegymapp.shared.generated.resources.common_ok
+import myweeklyroutinegymapp.shared.generated.resources.common_open
+import myweeklyroutinegymapp.shared.generated.resources.log_delete_count
+import myweeklyroutinegymapp.shared.generated.resources.log_delete_empty
+import myweeklyroutinegymapp.shared.generated.resources.log_delete_title
+import myweeklyroutinegymapp.shared.generated.resources.log_effective
+import myweeklyroutinegymapp.shared.generated.resources.log_hint_new_log
+import myweeklyroutinegymapp.shared.generated.resources.log_hint_no_activities
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_activity_missing
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_invalid_sets
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_logged
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_not_strength
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_removed
+import myweeklyroutinegymapp.shared.generated.resources.log_new
+import myweeklyroutinegymapp.shared.generated.resources.log_no_muscles
+import myweeklyroutinegymapp.shared.generated.resources.log_no_muscles_hint
+import myweeklyroutinegymapp.shared.generated.resources.log_no_strength_activities
+import myweeklyroutinegymapp.shared.generated.resources.log_nothing_checked
+import myweeklyroutinegymapp.shared.generated.resources.log_nothing_day
+import myweeklyroutinegymapp.shared.generated.resources.log_nothing_today
+import myweeklyroutinegymapp.shared.generated.resources.log_scope_activity
+import myweeklyroutinegymapp.shared.generated.resources.log_scope_all
+import myweeklyroutinegymapp.shared.generated.resources.log_show_activity
+import myweeklyroutinegymapp.shared.generated.resources.log_show_all
+import myweeklyroutinegymapp.shared.generated.resources.log_summary
+import myweeklyroutinegymapp.shared.generated.resources.log_title
+import myweeklyroutinegymapp.shared.generated.resources.log_totals_warmup
+import myweeklyroutinegymapp.shared.generated.resources.log_untrained_header
+import myweeklyroutinegymapp.shared.generated.resources.log_warmup
+import myweeklyroutinegymapp.shared.generated.resources.log_warmup_ratio
+import myweeklyroutinegymapp.shared.generated.resources.muscles_title
+import myweeklyroutinegymapp.shared.generated.resources.plural_effective_sets
+import myweeklyroutinegymapp.shared.generated.resources.plural_muscles
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import botix.dev.myweeklyroutinegymapp.domain.model.Activity
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
+import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
 import org.koin.compose.viewmodel.koinViewModel
@@ -46,6 +101,12 @@ fun WorkoutLogScreen(
         onCheck = { muscleId -> viewModel.addSets(muscleId, effectiveSets = 1) },
         onSetSets = { muscleId, effective, warmup -> viewModel.setSets(muscleId, effective, warmup) },
         onUncheck = viewModel::uncheck,
+        onSetShowAllMuscles = viewModel::setShowAllMuscles,
+        onSelectDay = viewModel::selectDay,
+        onOpenExisting = viewModel::openExisting,
+        onDeleteLog = viewModel::deleteLog,
+        onStepWeek = viewModel::stepWeek,
+        onGoToToday = viewModel::goToToday,
         onConsumeMessage = viewModel::consumeMessage,
         modifier = modifier,
     )
@@ -57,12 +118,20 @@ fun WorkoutLogContent(
     onManageMuscles: () -> Unit,
     onOpenSession: (Long) -> Unit,
     onCloseSession: () -> Unit,
+    onSetShowAllMuscles: (Boolean) -> Unit,
+    onSelectDay: (Long) -> Unit,
+    onOpenExisting: (SessionSummary) -> Unit,
+    onDeleteLog: (Long) -> Unit,
+    onStepWeek: (Boolean) -> Unit,
+    onGoToToday: () -> Unit,
     onCheck: (Long) -> Unit,
     onSetSets: (Long, Long, Long) -> Unit,
     onUncheck: (Long) -> Unit,
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showNewLogDialog by remember { mutableStateOf(false) }
+
     if (state.isLoading) {
         LoadingState(modifier)
         return
@@ -77,69 +146,252 @@ fun WorkoutLogContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Log workout", style = MaterialTheme.typography.headlineSmall)
-            Row {
-                TextButton(onClick = onManageMuscles) { Text("Muscles") }
+            Text(stringResource(Res.string.log_title), style = MaterialTheme.typography.headlineSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onManageMuscles) { Text(stringResource(Res.string.muscles_title)) }
                 if (state.sessionId != null) {
-                    TextButton(onClick = onCloseSession) { Text("Close") }
+                    TextButton(onClick = onCloseSession) { Text(stringResource(Res.string.common_close)) }
+                } else {
+                    // Creating a log is now an explicit act rather than a side effect
+                    // of picking from a list that filled the screen. The strip decides
+                    // *when*; this decides *whether*.
+                    Button(onClick = { showNewLogDialog = true }) { Text(stringResource(Res.string.log_new)) }
                 }
             }
         }
 
+        // Above both branches: the day is a filter on the whole screen, not something
+        // that belongs to an open session. Moving it while a session is open follows
+        // that activity to the new day rather than closing the screen.
+        WeekStrip(
+            selectedDay = state.selectedDay,
+            today = state.today,
+            visibleDays = state.visibleDays,
+            markedDays = state.daysWithSessions,
+            onSelectDay = onSelectDay,
+            onStepWeek = onStepWeek,
+            onGoToToday = onGoToToday,
+        )
+
         state.message?.let { MessageBanner(it, onConsumeMessage) }
 
+        // weight(1f) from here, because DayLog and OpenSession are their own
+        // composables and cannot reach this Column's scope to claim the space.
         if (state.sessionId == null) {
-            ActivityPicker(state, onOpenSession)
+            DayLog(state, onOpenExisting, onDeleteLog, Modifier.weight(1f))
         } else {
-            OpenSession(state, onCheck, onSetSets, onUncheck)
+            OpenSession(
+                state,
+                onSetShowAllMuscles,
+                onCheck,
+                onSetSets,
+                onUncheck,
+                Modifier.weight(1f),
+            )
         }
+    }
+
+    if (showNewLogDialog) {
+        NewLogDialog(
+            activities = state.strengthActivities,
+            onDismiss = { showNewLogDialog = false },
+            onPick = { activityId ->
+                onOpenSession(activityId)
+                showNewLogDialog = false
+            },
+        )
     }
 }
 
+/**
+ * What is logged on the selected day.
+ *
+ * A list, not a single session: a day can hold several — different activities, or a
+ * morning and an evening. That is only expressible now that the strip picks the day
+ * and a button creates the log, rather than the screen inferring both from a picker.
+ */
 @Composable
-private fun ActivityPicker(state: WorkoutLogUiState, onOpenSession: (Long) -> Unit) {
-    if (state.strengthActivities.isEmpty()) {
+private fun DayLog(
+    state: WorkoutLogUiState,
+    onOpenExisting: (SessionSummary) -> Unit,
+    onDeleteLog: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var confirmingDelete by remember { mutableStateOf<SessionSummary?>(null) }
+
+    if (state.dayLog.isEmpty()) {
         EmptyState(
-            text = "No strength activities yet.",
-            hint = "Create one on the Activities tab — only STRENGTH activities use this form.",
+            modifier = modifier,
+            text = stringResource(
+                if (state.isToday) Res.string.log_nothing_today else Res.string.log_nothing_day,
+            ),
+            hint = stringResource(
+                if (state.strengthActivities.isEmpty()) {
+                    Res.string.log_hint_no_activities
+                } else {
+                    Res.string.log_hint_new_log
+                },
+            ),
         )
         return
     }
 
-    SectionHeader("Pick an activity for today")
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(state.strengthActivities, key = { it.id }) { activity ->
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(state.dayLog, key = { it.sessionId }) { summary ->
             Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(activity.name, style = MaterialTheme.typography.titleMedium)
-                    FilledTonalButton(onClick = { onOpenSession(activity.id) }) { Text("Start") }
+                    Text(summary.activityName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        // An untouched session says so instead of showing "0 sets",
+                        // which reads like a logged result rather than an empty start.
+                        if (summary.isEmpty) {
+                            stringResource(Res.string.log_nothing_checked)
+                        } else {
+                            stringResource(
+                                Res.string.log_summary,
+                                summary.effectiveSets.toString(),
+                                summary.warmupSets.toString(),
+                                pluralStringResource(
+                                    Res.plurals.plural_muscles,
+                                    summary.muscleCount.toInt(),
+                                    summary.muscleCount.toString(),
+                                ),
+                            )
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = { onOpenExisting(summary) }) {
+                            Text(stringResource(Res.string.common_open))
+                        }
+                        TextButton(onClick = { confirmingDelete = summary }) {
+                            Text(stringResource(Res.string.common_delete))
+                        }
+                    }
                 }
             }
         }
     }
+
+    confirmingDelete?.let { summary ->
+        // Confirmed because it takes the entries with it, and an accidental tap here
+        // would silently destroy a whole session's volume.
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = null },
+            title = { Text(stringResource(Res.string.log_delete_title)) },
+            text = {
+                Text(
+                    if (summary.isEmpty) {
+                        stringResource(Res.string.log_delete_empty, summary.activityName)
+                    } else {
+                        stringResource(
+                            Res.string.log_delete_count,
+                            summary.activityName,
+                            pluralStringResource(
+                                Res.plurals.plural_effective_sets,
+                                summary.effectiveSets.toInt(),
+                                summary.effectiveSets.toString(),
+                            ),
+                            pluralStringResource(
+                                Res.plurals.plural_muscles,
+                                summary.muscleCount.toInt(),
+                                summary.muscleCount.toString(),
+                            ),
+                        )
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteLog(summary.sessionId)
+                    confirmingDelete = null
+                }) { Text(stringResource(Res.string.common_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = null }) {
+                    Text(stringResource(Res.string.common_cancel))
+                }
+            },
+        )
+    }
+}
+
+/** Choosing what the new log is for. Strength only — no other type uses this form. */
+@Composable
+private fun NewLogDialog(
+    activities: List<Activity>,
+    onDismiss: () -> Unit,
+    onPick: (Long) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.log_new)) },
+        text = {
+            if (activities.isEmpty()) {
+                Text(stringResource(Res.string.log_no_strength_activities))
+            } else {
+                Column(
+                    modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    activities.forEach { activity ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(activity.id) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                listOfNotNull(activity.icon, activity.name).joinToString(" "),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        // Picking one creates the log and closes, so there is nothing left to confirm.
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
+        },
+    )
 }
 
 @Composable
 private fun OpenSession(
     state: WorkoutLogUiState,
+    onSetShowAllMuscles: (Boolean) -> Unit,
     onCheck: (Long) -> Unit,
     onSetSets: (Long, Long, Long) -> Unit,
     onUncheck: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val entriesByMuscle = state.detail?.entries.orEmpty().associateBy { it.muscleId }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TotalsCard(state) }
+
+        // Shown whenever the list is narrowed, and also once it has been widened, so
+        // "why am I seeing everything?" has an answer on screen either way.
+        if (state.isScopedToActivity || state.showAllMuscles) {
+            item(key = "scope-banner") {
+                MuscleScopeBanner(
+                    isScoped = state.isScopedToActivity,
+                    onSetShowAllMuscles = onSetShowAllMuscles,
+                )
+            }
+        }
 
         if (state.sections.isEmpty()) {
             item {
                 EmptyState(
-                    text = "No muscles in the catalogue.",
-                    hint = "Use \"Muscles\" above to add groups and leaves before logging.",
+                    text = stringResource(Res.string.log_no_muscles),
+                    hint = stringResource(Res.string.log_no_muscles_hint),
                 )
             }
         }
@@ -158,7 +410,9 @@ private fun OpenSession(
         }
 
         if (state.untrainedThisWeek.isNotEmpty()) {
-            item(key = "untrained-header") { SectionHeader("Not trained in the last 7 days") }
+            item(key = "untrained-header") {
+                SectionHeader(stringResource(Res.string.log_untrained_header))
+            }
             item(key = "untrained-body") {
                 Text(
                     state.untrainedThisWeek.joinToString { "${it.groupName} · ${it.muscleName}" },
@@ -179,16 +433,23 @@ private fun TotalsCard(state: WorkoutLogUiState) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                "${totals.effectiveSets} effective set(s)",
+                pluralStringResource(
+                    Res.plurals.plural_effective_sets,
+                    totals.effectiveSets.toInt(),
+                    totals.effectiveSets.toString(),
+                ),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             // Warmup is tracked but deliberately excluded from volume, so it is
             // reported beside the total rather than folded into it.
-            Text("${totals.warmupSets} warmup", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(Res.string.log_totals_warmup, totals.warmupSets.toString()),
+                style = MaterialTheme.typography.bodyMedium,
+            )
             totals.warmupRatio?.let {
                 Text(
-                    "Warmup ratio ${it.format1()}",
+                    stringResource(Res.string.log_warmup_ratio, it.format1()),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -205,11 +466,7 @@ private fun MuscleRow(
     onSetSets: (Long, Long) -> Unit,
     onUncheck: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The checkbox is not a stored field: ticking it creates the entry, and
             // clearing it deletes the entry. Existence *is* the check.
@@ -221,47 +478,100 @@ private fun MuscleRow(
         }
 
         if (entry != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            // Stacked rather than side by side: two steppers plus their labels do not
+            // fit across a phone, and squeezing them would cost the labels — which are
+            // the only thing telling the two counters apart.
+            Column(
+                modifier = Modifier.padding(start = 48.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                OutlinedButton(
-                    onClick = {
-                        // Dropping below one effective set means the muscle was not
-                        // trained, which the schema rejects — so unchecking is the
-                        // correct interpretation, not an error.
+                SetsStepper(
+                    label = stringResource(Res.string.log_effective),
+                    value = entry.effectiveSets,
+                    // Dropping below one effective set means the muscle was not
+                    // trained, which the schema rejects — so unchecking is the correct
+                    // interpretation, not an error. Never disabled for that reason.
+                    onDecrement = {
                         if (entry.effectiveSets <= 1) {
                             onUncheck()
                         } else {
                             onSetSets(entry.effectiveSets - 1, entry.warmupSets)
                         }
                     },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-                ) { Text("−") }
-
-                Text(
-                    "${entry.effectiveSets}",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    onIncrement = { onSetSets(entry.effectiveSets + 1, entry.warmupSets) },
                 )
-
-                OutlinedButton(
-                    onClick = { onSetSets(entry.effectiveSets + 1, entry.warmupSets) },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-                ) { Text("+") }
+                SetsStepper(
+                    label = stringResource(Res.string.log_warmup),
+                    value = entry.warmupSets,
+                    // Zero warmup is a normal entry, not an absent one, so this floor
+                    // is a disabled button rather than the uncheck the effective
+                    // stepper does. Warmup never decides whether the muscle was
+                    // trained; it stays out of volume entirely.
+                    //
+                    // Clamped as well as disabled. The use case rejects a negative
+                    // with InvalidSets, whose message talks about effective sets — so
+                    // if the button were ever reachable the user would be told
+                    // something untrue. Cheaper to make the floor unreachable.
+                    onDecrement = {
+                        onSetSets(entry.effectiveSets, maxOf(0, entry.warmupSets - 1))
+                    },
+                    onIncrement = { onSetSets(entry.effectiveSets, entry.warmupSets + 1) },
+                    decrementEnabled = entry.warmupSets > 0,
+                )
             }
         }
+    }
+}
+
+/**
+ * One labelled counter. Shared by both set kinds so they cannot drift apart visually —
+ * the label is what distinguishes them, and identical controls make that reliable.
+ */
+@Composable
+private fun SetsStepper(
+    label: String,
+    value: Long,
+    onDecrement: () -> Unit,
+    onIncrement: () -> Unit,
+    decrementEnabled: Boolean = true,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(76.dp),
+        )
+        OutlinedButton(
+            onClick = onDecrement,
+            enabled = decrementEnabled,
+            contentPadding = PaddingValues(horizontal = 12.dp),
+        ) { Text("−") }
+
+        Text(
+            "$value",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+
+        OutlinedButton(
+            onClick = onIncrement,
+            contentPadding = PaddingValues(horizontal = 12.dp),
+        ) { Text("+") }
     }
 }
 
 @Composable
 private fun MessageBanner(message: WorkoutMessage, onDismiss: () -> Unit) {
     val text = when (message) {
-        WorkoutMessage.Logged -> "Logged."
-        WorkoutMessage.Removed -> "Removed."
-        WorkoutMessage.InvalidSets -> "A checked muscle needs at least one effective set."
-        WorkoutMessage.ActivityNotFound -> "That activity no longer exists."
-        WorkoutMessage.NotAStrengthActivity -> "This form only fits strength activities."
+        WorkoutMessage.Logged -> stringResource(Res.string.log_msg_logged)
+        WorkoutMessage.Removed -> stringResource(Res.string.log_msg_removed)
+        WorkoutMessage.InvalidSets -> stringResource(Res.string.log_msg_invalid_sets)
+        WorkoutMessage.ActivityNotFound -> stringResource(Res.string.log_msg_activity_missing)
+        WorkoutMessage.NotAStrengthActivity -> stringResource(Res.string.log_msg_not_strength)
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -271,7 +581,43 @@ private fun MessageBanner(message: WorkoutMessage, onDismiss: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text("OK") }
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
+        }
+    }
+}
+
+/**
+ * Says which muscle list is on screen, and lets the user swap.
+ *
+ * The activity's linked muscles are a starting point, never a restriction — an
+ * unplanned muscle has to be loggable without going back to edit the activity first.
+ */
+@Composable
+private fun MuscleScopeBanner(
+    isScoped: Boolean,
+    onSetShowAllMuscles: (Boolean) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(
+                    if (isScoped) Res.string.log_scope_activity else Res.string.log_scope_all,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { onSetShowAllMuscles(isScoped) }) {
+                Text(
+                    stringResource(
+                        if (isScoped) Res.string.log_show_all else Res.string.log_show_activity,
+                    ),
+                )
+            }
         }
     }
 }

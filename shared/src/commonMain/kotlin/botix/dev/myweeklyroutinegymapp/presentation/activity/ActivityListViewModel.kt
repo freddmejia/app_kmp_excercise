@@ -3,17 +3,32 @@ package botix.dev.myweeklyroutinegymapp.presentation.activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import botix.dev.myweeklyroutinegymapp.domain.model.Activity
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategory
+import botix.dev.myweeklyroutinegymapp.domain.Clock
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.CategorySelection
+import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.model.DeleteOutcome
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementTypeChange
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveActivityUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.AssignActivityCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ChangeMeasurementTypeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivitiesUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoriesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.SaveActivityResult
+import botix.dev.myweeklyroutinegymapp.presentation.common.WEEK
+import botix.dev.myweeklyroutinegymapp.presentation.common.weekOf
+import botix.dev.myweeklyroutinegymapp.presentation.common.weekStartOf
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.UpdateActivityUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityMuscleLinksUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityVolumeUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveSessionDaysUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMusclePickerUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetActivityMusclesUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -45,8 +60,52 @@ sealed interface ActivityMessage {
 data class ActivityListUiState(
     val activities: List<Activity> = emptyList(),
     val filter: ActivityFilter = ActivityFilter.ACTIVE,
+    /** Active categories, for the filter row, the create form and the row badges. */
+    val categories: List<ActivityCategory> = emptyList(),
+    val categorySelection: CategorySelection = CategorySelection.All,
+    /**
+     * The muscle catalogue, for the selection dialogs. Kept on the list state rather
+     * than fetched when a dialog opens: the creation form needs it before any
+     * activity exists, so there is no row to hang a lazy subscription off.
+     */
+    val muscleSections: List<MuscleSection> = emptyList(),
+    /** Linked muscle ids per activity; absent means none, which reads as "no opinion". */
+    val musclesByActivity: Map<Long, Set<Long>> = emptyMap(),
+    val selectedDay: Long = 0,
+    val today: Long = 0,
+    /** Days of the visible week that have a session, for the strip's markers. */
+    val daysWithSessions: Set<Long> = emptyList<Long>().toSet(),
+    /** Per-activity totals for the visible week; absent means not trained. */
+    val weekVolume: Map<Long, ActivityVolume> = emptyMap(),
     val isLoading: Boolean = true,
     val message: ActivityMessage? = null,
+) {
+    val visibleDays: List<Long> get() = weekOf(selectedDay)
+
+    val isToday: Boolean get() = selectedDay == today
+
+    /**
+     * The week splits the list rather than truncating it.
+     *
+     * This screen is also where activities are created, archived and deleted, so
+     * nothing may become unreachable because of the week on screen — an activity made
+     * seconds ago has trained nothing and must still be editable. Showing both halves
+     * keeps the week meaningful without the catalogue losing rows.
+     */
+    val trainedThisWeek: List<Activity> get() = activities.filter { it.id in weekVolume }
+
+    val untrainedThisWeek: List<Activity> get() = activities.filterNot { it.id in weekVolume }
+    /** Name lookup for the row badge; a category deleted mid-scroll simply drops out. */
+    val categoryNamesById: Map<Long, String> get() = categories.associate { it.id to it.name }
+}
+
+
+
+/** The week-scoped reads, kept together so they can never describe different weeks. */
+private data class WeekState(
+    val day: Long,
+    val volume: Map<Long, ActivityVolume>,
+    val markers: Set<Long>,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -57,51 +116,154 @@ class ActivityListViewModel(
     private val archiveActivity: ArchiveActivityUseCase,
     private val deleteActivity: DeleteActivityUseCase,
     private val changeMeasurementType: ChangeMeasurementTypeUseCase,
+    private val observeCategories: ObserveCategoriesUseCase,
+    private val assignCategory: AssignActivityCategoryUseCase,
+    private val observeMusclePicker: ObserveMusclePickerUseCase,
+    private val observeMuscleLinks: ObserveActivityMuscleLinksUseCase,
+    private val setActivityMuscles: SetActivityMusclesUseCase,
+    private val observeActivityVolume: ObserveActivityVolumeUseCase,
+    private val observeSessionDays: ObserveSessionDaysUseCase,
+    clock: Clock,
 ) : ViewModel() {
 
+    /**
+     * Resolved once, not per emission: a value that changed mid-session would move
+     * the strip under the user's finger.
+     */
+    private val today = clock.today()
+    private val selectedDay = MutableStateFlow(today)
+
+    /** The week's reads, resolved together so they can never describe different weeks. */
+    private val weekState = selectedDay.flatMapLatest { day ->
+        val start = weekStartOf(day)
+        combine(
+            observeActivityVolume(start, start + WEEK - 1),
+            observeSessionDays(start, start + WEEK - 1),
+        ) { volume, markers ->
+            WeekState(day, volume.associateBy { it.activityId }, markers)
+        }
+    }
+
     private val filter = MutableStateFlow(ActivityFilter.ACTIVE)
+    private val categorySelection = MutableStateFlow<CategorySelection>(CategorySelection.All)
     private val message = MutableStateFlow<ActivityMessage?>(null)
+
+    /**
+     * flatMapLatest over *both* filters, so changing either cancels the previous
+     * query rather than leaving two collectors racing to set the list.
+     */
+    private val activities = combine(filter, categorySelection, ::Pair)
+        .flatMapLatest { (currentFilter, currentCategory) ->
+            observeActivities(currentFilter, currentCategory)
+        }
 
     val state: StateFlow<ActivityListUiState> = combine(
         filter,
+        categorySelection,
         message,
-        // flatMapLatest, so switching filter cancels the previous query rather than
-        // leaving two collectors racing to set the list.
-        filter.flatMapLatest { observeActivities(it) },
-    ) { currentFilter, currentMessage, activities ->
+        activities,
+        // The category list is its own observable source: creating one on the
+        // category screen makes it appear in this filter row without a refresh.
+        observeCategories(),
+    ) { currentFilter, currentCategory, currentMessage, currentActivities, categories ->
         ActivityListUiState(
-            activities = activities,
+            activities = currentActivities,
             filter = currentFilter,
+            categories = categories,
+            categorySelection = currentCategory,
             isLoading = false,
             message = currentMessage,
+        )
+    }.combine(observeMusclePicker()) { partial, sections ->
+        // combine() tops out at five flows, so the muscle data folds in as two
+        // further steps rather than forcing the rest into a nested shape.
+        partial.copy(muscleSections = sections)
+    }.combine(observeMuscleLinks()) { partial, links ->
+        partial.copy(musclesByActivity = links)
+    }.combine(weekState) { partial, week ->
+        // The split happens in the state's own getters rather than here: the activity
+        // list and the week's volume come from different tables, and absence from the
+        // volume map *is* "not trained", so it is a set membership test on read.
+        partial.copy(
+            selectedDay = week.day,
+            today = today,
+            daysWithSessions = week.markers,
+            weekVolume = week.volume,
         )
     }.stateIn(
         scope = viewModelScope,
         // Keeps the database query alive briefly across a config change, so a
         // rotation does not re-query and flash an empty list.
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = ActivityListUiState(),
+        initialValue = ActivityListUiState(selectedDay = today, today = today),
     )
+
+    /** An empty set is meaningful: it clears the link and restores "no opinion". */
+    fun setMuscles(activityId: Long, muscleIds: Set<Long>) {
+        viewModelScope.launch { setActivityMuscles(activityId, muscleIds) }
+    }
 
     fun setFilter(value: ActivityFilter) {
         filter.value = value
     }
+
+    fun setCategorySelection(value: CategorySelection) {
+        categorySelection.value = value
+    }
+
+    /**
+     * Selects a day. Within the visible week this does not move the strip — the week
+     * is derived from the selection, so a day in the same week yields the same week.
+     */
+    fun selectDay(day: Long) {
+        selectedDay.value = day
+    }
+
+    /** The week arrows: seven days over, keeping the weekday column. */
+    fun stepWeek(forward: Boolean) = selectDay(selectedDay.value + if (forward) WEEK else -WEEK)
+
+    fun goToToday() = selectDay(today)
 
     /** Call after showing [ActivityListUiState.message] so it is not shown twice. */
     fun consumeMessage() {
         message.value = null
     }
 
-    fun create(name: String, measurementType: MeasurementType, icon: String? = null, color: String? = null) {
+    fun create(
+        name: String,
+        measurementType: MeasurementType,
+        icon: String? = null,
+        color: String? = null,
+        categoryId: Long? = null,
+        muscleIds: Set<Long> = emptySet(),
+    ) {
         viewModelScope.launch {
-            message.value = createActivity(name, measurementType, icon, color).toMessage()
+            message.value =
+                createActivity(name, measurementType, icon, color, categoryId, muscleIds).toMessage()
         }
     }
 
-    fun rename(id: Long, name: String, icon: String? = null, color: String? = null) {
+    fun rename(
+        id: Long,
+        name: String,
+        icon: String? = null,
+        color: String? = null,
+        categoryId: Long? = null,
+    ) {
         viewModelScope.launch {
-            message.value = updateActivity(id, name, icon, color).toMessage()
+            message.value = updateActivity(id, name, icon, color, categoryId).toMessage()
         }
+    }
+
+    /**
+     * Moves an activity between categories from the list row; null uncategorises it.
+     *
+     * Distinct from [rename] because the row has no name field in hand — routing this
+     * through the rename use case would make a re-validation of the name a condition
+     * of changing its label.
+     */
+    fun setCategory(id: Long, categoryId: Long?) {
+        viewModelScope.launch { assignCategory(id, categoryId) }
     }
 
     fun setArchived(id: Long, archived: Boolean) {

@@ -3,11 +3,14 @@ package botix.dev.myweeklyroutinegymapp.domain.usecase.activity
 import botix.dev.myweeklyroutinegymapp.domain.Clock
 import botix.dev.myweeklyroutinegymapp.domain.model.Activity
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityUsage
+import botix.dev.myweeklyroutinegymapp.domain.model.CategorySelection
 import botix.dev.myweeklyroutinegymapp.domain.model.DeleteOutcome
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementTypeChange
+import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityMuscleRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * Use cases for the activity catalogue.
@@ -32,12 +35,30 @@ sealed interface SaveActivityResult {
 }
 
 class ObserveActivitiesUseCase(private val repository: ActivityRepository) {
-    operator fun invoke(filter: ActivityFilter = ActivityFilter.ACTIVE): Flow<List<Activity>> =
-        when (filter) {
+    /**
+     * [category] narrows the archive filter further.
+     *
+     * Applied in Kotlin rather than SQL on purpose. Doing it in SQL would need a
+     * query per (status x category) combination, and the catalogue is a handful of
+     * rows the screen has already loaded. It also keeps the single observable source
+     * the spec calls for (ACTIVITY §7): one query feeds every consumer, and the
+     * filter stays a derived value that cannot disagree with it.
+     */
+    operator fun invoke(
+        filter: ActivityFilter = ActivityFilter.ACTIVE,
+        category: CategorySelection = CategorySelection.All,
+    ): Flow<List<Activity>> {
+        val source = when (filter) {
             ActivityFilter.ACTIVE -> repository.observeActive()
             ActivityFilter.ARCHIVED -> repository.observeArchived()
             ActivityFilter.ALL -> repository.observeAll()
         }
+        return when (category) {
+            CategorySelection.All -> source
+            CategorySelection.Uncategorised -> source.map { list -> list.filter { it.categoryId == null } }
+            is CategorySelection.Of -> source.map { list -> list.filter { it.categoryId == category.id } }
+        }
+    }
 }
 
 /** Active activities ordered by how often they are logged — the picker's ordering. */
@@ -47,27 +68,39 @@ class ObserveActivityPickerUseCase(private val repository: ActivityRepository) {
 
 class CreateActivityUseCase(
     private val repository: ActivityRepository,
+    private val links: ActivityMuscleRepository,
     private val clock: Clock,
 ) {
+    /**
+     * [muscleIds] is the optional set of muscles the activity targets.
+     *
+     * Written after the activity row, in a second transaction. Not atomic with it,
+     * and deliberately not worth making so: the links are an optional default for the
+     * log picker, so the worst case is an activity that starts with no opinion —
+     * a state the user can reach on purpose anyway, and fix from the same form.
+     */
     suspend operator fun invoke(
         name: String,
         measurementType: MeasurementType,
         icon: String? = null,
         color: String? = null,
+        categoryId: Long? = null,
+        muscleIds: Set<Long> = emptySet(),
     ): SaveActivityResult {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return SaveActivityResult.BlankName
         if (repository.isNameTaken(trimmed)) return SaveActivityResult.NameTaken
 
-        return SaveActivityResult.Saved(
-            repository.create(
-                name = trimmed,
-                measurementType = measurementType,
-                icon = icon,
-                color = color,
-                createdAt = clock.nowMillis(),
-            ),
+        val id = repository.create(
+            name = trimmed,
+            measurementType = measurementType,
+            icon = icon,
+            color = color,
+            categoryId = categoryId,
+            createdAt = clock.nowMillis(),
         )
+        if (muscleIds.isNotEmpty()) links.setMusclesFor(id, muscleIds)
+        return SaveActivityResult.Saved(id)
     }
 }
 
@@ -81,13 +114,14 @@ class UpdateActivityUseCase(private val repository: ActivityRepository) {
         name: String,
         icon: String? = null,
         color: String? = null,
+        categoryId: Long? = null,
     ): SaveActivityResult {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return SaveActivityResult.BlankName
         // Excluding this row: keeping its own name is not a clash with itself.
         if (repository.isNameTaken(trimmed, excludingId = id)) return SaveActivityResult.NameTaken
 
-        repository.updateIdentity(id, trimmed, icon, color)
+        repository.updateIdentity(id, trimmed, icon, color, categoryId)
         return SaveActivityResult.Saved(id)
     }
 }

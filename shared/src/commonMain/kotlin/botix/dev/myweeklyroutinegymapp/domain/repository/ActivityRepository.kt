@@ -35,15 +35,25 @@ interface ActivityRepository {
         measurementType: MeasurementType,
         icon: String? = null,
         color: String? = null,
+        categoryId: Long? = null,
         isSeed: Boolean = false,
         createdAt: Long,
     ): Long
 
     /**
-     * Renames and restyles. [MeasurementType] is deliberately not editable here —
-     * history references the row by id, so this is always safe.
+     * Renames, restyles and recategorises. [MeasurementType] is deliberately not
+     * editable here — history references the row by id, so this is always safe.
      */
-    suspend fun updateIdentity(id: Long, name: String, icon: String?, color: String?)
+    suspend fun updateIdentity(
+        id: Long,
+        name: String,
+        icon: String?,
+        color: String?,
+        categoryId: Long?,
+    )
+
+    /** Reassigns the category alone; null moves the activity to uncategorised. */
+    suspend fun setCategory(id: Long, categoryId: Long?)
 
     /** Allowed only while the activity has no sessions; see [MeasurementTypeChange]. */
     suspend fun changeMeasurementType(id: Long, measurementType: MeasurementType): MeasurementTypeChange
