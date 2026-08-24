@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,10 +59,10 @@ import myweeklyroutinegymapp.shared.generated.resources.month_may
 import myweeklyroutinegymapp.shared.generated.resources.month_nov
 import myweeklyroutinegymapp.shared.generated.resources.month_oct
 import myweeklyroutinegymapp.shared.generated.resources.month_sep
-import myweeklyroutinegymapp.shared.generated.resources.week_pick_date
 import myweeklyroutinegymapp.shared.generated.resources.week_range_cross_month
 import myweeklyroutinegymapp.shared.generated.resources.week_range_cross_year
 import myweeklyroutinegymapp.shared.generated.resources.week_range_same_month
+import myweeklyroutinegymapp.shared.generated.resources.week_select_date
 import myweeklyroutinegymapp.shared.generated.resources.week_today
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -92,7 +93,11 @@ fun weekOf(day: Long): List<Long> = weekStartOf(day).let { start -> (start..star
  * the cell you meant to press is still the cell you press.
  *
  * The arrows are therefore the short hop, and the calendar the long one: anything
- * further than a week or two away is faster to pick by date than to step to.
+ * further than a week or two away is faster to pick by date than to step to. They sit
+ * on the strip's own row, flanking the cells they move.
+ *
+ * The date above names [selectedDay] in full, because the cells themselves show no
+ * month or year. Tapping it returns to [today]; the caret beside it opens the calendar.
  *
  * Shared by the log and activity screens. It takes plain values rather than either
  * screen's UI state so neither owns it, and both cannot drift into slightly different
@@ -113,55 +118,62 @@ fun WeekStrip(
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The selected day, spelled out. The cells carry only a weekday and a number,
+        // so this is the only thing on screen naming the month and year — browse two
+        // weeks on and "Lun 7" is otherwise unplaceable. [today] keeps its own mark
+        // in the strip (the outlined cell), which is what says where "now" is.
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
-                onClick = { onStepWeek(false) },
-                contentPadding = PaddingValues(horizontal = 12.dp),
-            ) { Text("‹") }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    selectedDay.asFullDate(),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Offered only when it would do something. A "Today" button while
-                    // already on today is a control that cannot be pressed usefully.
-                    if (selectedDay != today) {
-                        TextButton(
-                            onClick = onGoToToday,
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) { Text(stringResource(Res.string.week_today)) }
-                    }
-                    // Labelled, not bare. The calendar emoji has a date drawn into its
-                    // artwork ("July 17" on Noto), which sitting directly under a live
-                    // date reads as data rather than decoration.
-                    TextButton(
+            Text(
+                selectedDay.asFullDate(),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                // Reads as the selection, acts as "go home": tapping it returns to
+                // today. Always enabled — pressing it while already on today is a
+                // no-op, which is quieter than a button that appears and disappears
+                // under the finger as the selection moves.
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(
+                        onClickLabel = stringResource(Res.string.week_today),
+                        role = Role.Button,
+                        onClick = onGoToToday,
+                    )
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+            // A separate target, not part of the date: one tap goes to today, the
+            // other opens the calendar, and they must not be reachable by the same
+            // press. The caret is the affordance the emoji used to carry, minus the
+            // artwork — the calendar glyph has a date drawn into it, which sitting
+            // beside a live date read as data.
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(
+                        onClickLabel = stringResource(Res.string.week_select_date),
+                        role = Role.Button,
                         onClick = { showDatePicker = true },
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                    ) { Text(stringResource(Res.string.week_pick_date)) }
-                }
+                    )
+                    .size(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("\u25BE", style = MaterialTheme.typography.titleSmall)
             }
-
-            OutlinedButton(
-                onClick = { onStepWeek(true) },
-                contentPadding = PaddingValues(horizontal = 12.dp),
-            ) { Text("›") }
         }
 
+        // The arrows sit on the row they act on. They step the week the cells show,
+        // so reading them above the strip made them look like they belonged to the
+        // date instead — which is the one thing they do not move.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            WeekArrow(glyph = "\u2039", onClick = { onStepWeek(false) })
+
             visibleDays.forEach { day ->
                 DayCell(
                     day = day,
@@ -172,6 +184,8 @@ fun WeekStrip(
                     modifier = Modifier.weight(1f),
                 )
             }
+
+            WeekArrow(glyph = "\u203A", onClick = { onStepWeek(true) })
         }
     }
 
@@ -184,6 +198,28 @@ fun WeekStrip(
                 showDatePicker = false
             },
         )
+    }
+}
+
+/**
+ * One week back or forward.
+ *
+ * Sized rather than left to [OutlinedButton]'s own minimum, which is wide enough that
+ * two of them plus seven cells stop fitting a phone in portrait. The M3 touch target
+ * still measures 48.dp around it, so the circle is small without the tap being small.
+ */
+@Composable
+private fun WeekArrow(
+    glyph: String,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(36.dp),
+        shape = CircleShape,
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Text(glyph, style = MaterialTheme.typography.titleMedium)
     }
 }
 

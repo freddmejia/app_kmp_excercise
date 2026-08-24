@@ -80,6 +80,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
@@ -132,31 +133,23 @@ fun WorkoutLogContent(
 ) {
     var showNewLogDialog by remember { mutableStateOf(false) }
 
-    if (state.isLoading) {
-        LoadingState(modifier)
-        return
-    }
-
     Column(
-        modifier = modifier.fillMaxSize().padding(16.dp),
+        // Narrow side margins so the week strip can use the width: seven cells plus
+        // two arrows is the widest row on any screen here, and every dp taken off the
+        // sides goes straight into the cells. Vertical stays at 16 — it is the gap
+        // to the app bar and the tab row, and has no such pressure on it.
+        modifier = modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.log_title), style = MaterialTheme.typography.headlineSmall)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onManageMuscles) { Text(stringResource(Res.string.muscles_title)) }
-                if (state.sessionId != null) {
-                    TextButton(onClick = onCloseSession) { Text(stringResource(Res.string.common_close)) }
-                } else {
-                    // Creating a log is now an explicit act rather than a side effect
-                    // of picking from a list that filled the screen. The strip decides
-                    // *when*; this decides *whether*.
-                    Button(onClick = { showNewLogDialog = true }) { Text(stringResource(Res.string.log_new)) }
-                }
+        ScreenHeader(title = stringResource(Res.string.log_title)) {
+            TextButton(onClick = onManageMuscles) { Text(stringResource(Res.string.muscles_title)) }
+            if (state.sessionId != null) {
+                TextButton(onClick = onCloseSession) { Text(stringResource(Res.string.common_close)) }
+            } else {
+                // Creating a log is now an explicit act rather than a side effect
+                // of picking from a list that filled the screen. The strip decides
+                // *when*; this decides *whether*.
+                Button(onClick = { showNewLogDialog = true }) { Text(stringResource(Res.string.log_new)) }
             }
         }
 
@@ -177,10 +170,14 @@ fun WorkoutLogContent(
 
         // weight(1f) from here, because DayLog and OpenSession are their own
         // composables and cannot reach this Column's scope to claim the space.
-        if (state.sessionId == null) {
-            DayLog(state, onOpenExisting, onDeleteLog, Modifier.weight(1f))
-        } else {
-            OpenSession(
+        //
+        // Loading swaps the *content*, never the header: returning early instead
+        // would take the title and the New-log button with it, which is the one
+        // difference the Activities screen never had.
+        when {
+            state.isLoading -> LoadingState(Modifier.weight(1f))
+            state.sessionId == null -> DayLog(state, onOpenExisting, onDeleteLog, Modifier.weight(1f))
+            else -> OpenSession(
                 state,
                 onSetShowAllMuscles,
                 onCheck,

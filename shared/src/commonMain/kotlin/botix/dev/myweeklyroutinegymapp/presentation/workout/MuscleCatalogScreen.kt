@@ -49,6 +49,7 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -96,16 +97,9 @@ fun MuscleCatalogContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.muscles_title), style = MaterialTheme.typography.headlineSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { addGroupOpen = true }) { Text(stringResource(Res.string.muscles_add_group)) }
-                TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
-            }
+        ScreenHeader(title = stringResource(Res.string.muscles_title)) {
+            Button(onClick = { addGroupOpen = true }) { Text(stringResource(Res.string.muscles_add_group)) }
+            TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
         }
 
         state.message?.let { MessageBanner(it, onConsumeMessage) }

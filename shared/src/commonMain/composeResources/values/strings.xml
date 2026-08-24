@@ -40,7 +40,6 @@
 
     <!-- ================= week strip ================= -->
     <string name="week_today">Today</string>
-    <string name="week_pick_date">📅 Date</string>
     <string name="week_select_date">Select date</string>
 
     <!-- Short weekday names, Monday first. -->

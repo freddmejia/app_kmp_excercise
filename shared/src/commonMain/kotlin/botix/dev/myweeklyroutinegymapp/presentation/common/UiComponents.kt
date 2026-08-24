@@ -3,6 +3,7 @@ package botix.dev.myweeklyroutinegymapp.presentation.common
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -45,6 +46,43 @@ fun EmptyState(
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/**
+ * A screen's pinned title and the actions that belong to it.
+ *
+ * [FlowRow] rather than a plain `Row`, because a `Row` measures its children in order and
+ * gives each one only the width the previous ones left over. A title long enough to
+ * fill the line therefore does not push the trailing buttons off the edge — it
+ * measures them to zero, which removes them from the tree entirely: no pixels, and
+ * nothing for accessibility or a tap to find. On the Log screen that deleted the one
+ * control that creates a log, and the collapsed button then wrapped its own label a
+ * letter per line, making the row tall enough to strand the title in mid-screen.
+ *
+ * A width that holds in English is no evidence at all here: "Log workout" becomes
+ * "Registrar entrenamiento", and "New log" becomes "Nuevo registro". So the actions
+ * drop to a second line when they do not fit rather than competing for the first,
+ * and stay beside the title when they do.
+ */
+@Composable
+fun ScreenHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    actions: @Composable () -> Unit = {},
+) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        // One line: title left, actions right, exactly as before. Two: each line
+        // holds a single item, which SpaceBetween leaves at the start.
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = title, style = MaterialTheme.typography.headlineSmall)
+        // Also a FlowRow: the actions alone can outgrow the line once translated,
+        // and inside a Row the last of them would vanish the same way.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
     }
 }
 
