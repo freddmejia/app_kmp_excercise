@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategoryUsage
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -114,7 +115,7 @@ fun ActivityCategoryContent(
             TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
         }
 
-        state.message?.let { CategoryMessageBanner(it, onConsumeMessage) }
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
         if (state.isEmpty) {
             EmptyState(
@@ -288,45 +289,33 @@ private fun CategoryFormDialog(
     )
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun CategoryMessageBanner(message: CategoryMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        CategoryMessage.Saved -> stringResource(Res.string.common_saved)
-        CategoryMessage.NameBlank -> stringResource(Res.string.category_msg_name_blank)
-        CategoryMessage.NameTaken -> stringResource(Res.string.category_msg_name_taken)
-        is CategoryMessage.Deleted -> when (message.uncategorisedCount) {
-            0L -> stringResource(Res.string.common_deleted)
-            else -> stringResource(
-                Res.string.category_msg_deleted_count,
-                pluralStringResource(
-                    Res.plurals.plural_activities,
-                    message.uncategorisedCount.toInt(),
-                    message.uncategorisedCount.toString(),
-                ),
-            )
-        }
-
-        is CategoryMessage.Archived -> when (message.uncategorisedCount) {
-            0L -> stringResource(Res.string.common_archived)
-            else -> stringResource(
-                Res.string.category_msg_archived_count,
-                pluralStringResource(
-                    Res.plurals.plural_activities,
-                    message.uncategorisedCount.toInt(),
-                    message.uncategorisedCount.toString(),
-                ),
-            )
-        }
+private fun messageText(message: CategoryMessage): String = when (message) {
+    CategoryMessage.Saved -> stringResource(Res.string.common_saved)
+    CategoryMessage.NameBlank -> stringResource(Res.string.category_msg_name_blank)
+    CategoryMessage.NameTaken -> stringResource(Res.string.category_msg_name_taken)
+    is CategoryMessage.Deleted -> when (message.uncategorisedCount) {
+        0L -> stringResource(Res.string.common_deleted)
+        else -> stringResource(
+            Res.string.category_msg_deleted_count,
+            pluralStringResource(
+                Res.plurals.plural_activities,
+                message.uncategorisedCount.toInt(),
+                message.uncategorisedCount.toString(),
+            ),
+        )
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
+    is CategoryMessage.Archived -> when (message.uncategorisedCount) {
+        0L -> stringResource(Res.string.common_archived)
+        else -> stringResource(
+            Res.string.category_msg_archived_count,
+            pluralStringResource(
+                Res.plurals.plural_activities,
+                message.uncategorisedCount.toInt(),
+                message.uncategorisedCount.toString(),
+            ),
+        )
     }
 }

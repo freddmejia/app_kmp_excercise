@@ -3,18 +3,23 @@ package botix.dev.myweeklyroutinegymapp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import botix.dev.myweeklyroutinegymapp.presentation.common.LocalSnackbarHostState
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightScreen
@@ -64,9 +69,25 @@ fun App() {
         // one field of the screen behind it, not a destination of its own.
         var showCategories by rememberSaveable { mutableStateOf(false) }
         val destination = Destination.entries[selectedIndex]
+        // One queue for the whole app, so a message raised on any screen lands in the
+        // same place and two of them cannot overlap.
+        val snackbarHostState = remember { SnackbarHostState() }
 
         Scaffold(
-            modifier = Modifier.fillMaxSize().safeContentPadding(),
+            // safeDrawing, not safeContent. safeContent is safeDrawing *plus*
+            // safeGestures, and safeGestures carries the back-swipe exclusion strips
+            // down the left and right edges — roughly 24.dp a side on a gesture-nav
+            // device. That is invisible padding applied to every screen, outside any
+            // margin a screen sets for itself, so a screen asking for 10.dp side
+            // margins silently got 34.dp and no amount of editing the screen fixed it.
+            //
+            // Dropping it costs nothing here: the exclusion zones intercept *swipes*,
+            // not taps, and nothing in this app is dragged horizontally. Status bar,
+            // navigation bar and display cutout are all still honoured.
+            modifier = Modifier.fillMaxSize().safeDrawingPadding(),
+            // Above the navigation bar rather than over it: the tab row stays reachable
+            // while a message is on screen.
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 NavigationBar {
                     Destination.entries.forEachIndexed { index, entry ->
@@ -81,6 +102,7 @@ fun App() {
             },
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+              CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
                 when (destination) {
                     Destination.WORKOUT ->
                         if (showMuscleCatalog) {
@@ -96,6 +118,7 @@ fun App() {
                         }
                     Destination.WEIGHT -> BodyWeightScreen()
                 }
+              }
             }
         }
     }

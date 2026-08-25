@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -83,6 +87,52 @@ fun ScreenHeader(
         // Also a FlowRow: the actions alone can outgrow the line once translated,
         // and inside a Row the last of them would vanish the same way.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
+    }
+}
+
+/**
+ * The app's one snackbar queue, reachable from any screen.
+ *
+ * Ambient rather than a parameter threaded through five screens: the host lives in
+ * the [androidx.compose.material3.Scaffold] at the root, above the navigation bar, and
+ * every screen inside it wants the same one. Passing it down would put a plumbing
+ * argument in signatures that are otherwise about the screen's own data.
+ */
+val LocalSnackbarHostState = staticCompositionLocalOf<SnackbarHostState> {
+    error("No SnackbarHostState provided — wrap the content in CompositionLocalProvider.")
+}
+
+/**
+ * Shows [text] as a snackbar and then tells the view model it has been delivered.
+ *
+ * Replaces the message cards each screen used to inline. A card is a layout node: it
+ * appeared *between* the header and the list, pushed everything below it down by its
+ * own height, and needed an OK press to go away. A confirmation that reflows the
+ * screen it is confirming — and that has to be dismissed before the screen looks
+ * right again — costs more than it tells you.
+ *
+ * [text] is resolved by the caller because the message-to-string mapping needs
+ * `stringResource` and plurals, which are `@Composable` and cannot be called from
+ * inside the effect.
+ *
+ * Keyed on [text], so the effect restarts only when the message actually changes;
+ * a second identical message still fires, because consuming the first sets the state
+ * to null in between and that is a key change either way. [onConsume] runs *after*
+ * the snackbar goes away rather than before: consuming first would null the key and
+ * cancel the very snackbar being shown.
+ */
+@Composable
+fun MessageSnackbar(text: String?, onConsume: () -> Unit) {
+    val host = LocalSnackbarHostState.current
+    LaunchedEffect(text) {
+        if (text != null) {
+            host.showSnackbar(
+                message = text,
+                withDismissAction = true,
+                duration = SnackbarDuration.Short,
+            )
+            onConsume()
+        }
     }
 }
 

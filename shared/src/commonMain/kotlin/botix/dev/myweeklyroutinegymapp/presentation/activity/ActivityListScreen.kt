@@ -96,6 +96,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
@@ -192,9 +193,7 @@ fun ActivityListContent(
             onGoToToday = onGoToToday,
         )
 
-        state.message?.let { message ->
-            MessageBanner(message = message, onDismiss = onConsumeMessage)
-        }
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
         when {
             state.isLoading -> LoadingState()
@@ -619,42 +618,30 @@ private fun PickCategoryDialog(
     )
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun MessageBanner(message: ActivityMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        ActivityMessage.NameBlank -> stringResource(Res.string.activity_msg_name_blank)
-        ActivityMessage.NameTaken -> stringResource(Res.string.activity_msg_name_taken)
-        ActivityMessage.Saved -> stringResource(Res.string.common_saved)
-        ActivityMessage.Deleted -> stringResource(Res.string.common_deleted)
-        is ActivityMessage.DeleteBlocked -> stringResource(
-            Res.string.activity_msg_delete_blocked,
-            pluralStringResource(
-                Res.plurals.plural_sessions,
-                message.sessionCount.toInt(),
-                message.sessionCount.toString(),
-            ),
-        )
+private fun messageText(message: ActivityMessage): String = when (message) {
+    ActivityMessage.NameBlank -> stringResource(Res.string.activity_msg_name_blank)
+    ActivityMessage.NameTaken -> stringResource(Res.string.activity_msg_name_taken)
+    ActivityMessage.Saved -> stringResource(Res.string.common_saved)
+    ActivityMessage.Deleted -> stringResource(Res.string.common_deleted)
+    is ActivityMessage.DeleteBlocked -> stringResource(
+        Res.string.activity_msg_delete_blocked,
+        pluralStringResource(
+            Res.plurals.plural_sessions,
+            message.sessionCount.toInt(),
+            message.sessionCount.toString(),
+        ),
+    )
 
-        is ActivityMessage.MeasurementTypeLocked -> stringResource(
-            Res.string.activity_msg_type_locked,
-            pluralStringResource(
-                Res.plurals.plural_sessions,
-                message.sessionCount.toInt(),
-                message.sessionCount.toString(),
-            ),
-        )
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
-    }
+    is ActivityMessage.MeasurementTypeLocked -> stringResource(
+        Res.string.activity_msg_type_locked,
+        pluralStringResource(
+            Res.plurals.plural_sessions,
+            message.sessionCount.toInt(),
+            message.sessionCount.toString(),
+        ),
+    )
 }
 
 private fun MeasurementType.labelRes(): StringResource = when (this) {

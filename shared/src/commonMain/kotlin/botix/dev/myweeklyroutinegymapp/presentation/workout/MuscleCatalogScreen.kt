@@ -49,6 +49,7 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -102,7 +103,7 @@ fun MuscleCatalogContent(
             TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
         }
 
-        state.message?.let { MessageBanner(it, onConsumeMessage) }
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
         if (state.isEmpty) {
             EmptyState(
@@ -226,30 +227,18 @@ private fun NameDialog(
     )
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun MessageBanner(message: MuscleCatalogMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        MuscleCatalogMessage.Saved -> stringResource(Res.string.common_saved)
-        MuscleCatalogMessage.Deleted -> stringResource(Res.string.common_deleted)
-        MuscleCatalogMessage.BlankName -> stringResource(Res.string.muscle_msg_name_blank)
-        is MuscleCatalogMessage.DeleteBlocked -> stringResource(
-            Res.string.muscle_msg_delete_blocked,
-            pluralStringResource(
-                Res.plurals.plural_session_entries,
-                message.referenceCount.toInt(),
-                message.referenceCount.toString(),
-            ),
-        )
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
-    }
+private fun messageText(message: MuscleCatalogMessage): String = when (message) {
+    MuscleCatalogMessage.Saved -> stringResource(Res.string.common_saved)
+    MuscleCatalogMessage.Deleted -> stringResource(Res.string.common_deleted)
+    MuscleCatalogMessage.BlankName -> stringResource(Res.string.muscle_msg_name_blank)
+    is MuscleCatalogMessage.DeleteBlocked -> stringResource(
+        Res.string.muscle_msg_delete_blocked,
+        pluralStringResource(
+            Res.plurals.plural_session_entries,
+            message.referenceCount.toInt(),
+            message.referenceCount.toString(),
+        ),
+    )
 }

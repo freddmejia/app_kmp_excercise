@@ -80,6 +80,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
@@ -166,7 +167,7 @@ fun WorkoutLogContent(
             onGoToToday = onGoToToday,
         )
 
-        state.message?.let { MessageBanner(it, onConsumeMessage) }
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
         // weight(1f) from here, because DayLog and OpenSession are their own
         // composables and cannot reach this Column's scope to claim the space.
@@ -561,26 +562,14 @@ private fun SetsStepper(
     }
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun MessageBanner(message: WorkoutMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        WorkoutMessage.Logged -> stringResource(Res.string.log_msg_logged)
-        WorkoutMessage.Removed -> stringResource(Res.string.log_msg_removed)
-        WorkoutMessage.InvalidSets -> stringResource(Res.string.log_msg_invalid_sets)
-        WorkoutMessage.ActivityNotFound -> stringResource(Res.string.log_msg_activity_missing)
-        WorkoutMessage.NotAStrengthActivity -> stringResource(Res.string.log_msg_not_strength)
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
-    }
+private fun messageText(message: WorkoutMessage): String = when (message) {
+    WorkoutMessage.Logged -> stringResource(Res.string.log_msg_logged)
+    WorkoutMessage.Removed -> stringResource(Res.string.log_msg_removed)
+    WorkoutMessage.InvalidSets -> stringResource(Res.string.log_msg_invalid_sets)
+    WorkoutMessage.ActivityNotFound -> stringResource(Res.string.log_msg_activity_missing)
+    WorkoutMessage.NotAStrengthActivity -> stringResource(Res.string.log_msg_not_strength)
 }
 
 /**
