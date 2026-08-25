@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -44,7 +45,6 @@ import myweeklyroutinegymapp.shared.generated.resources.common_cancel
 import myweeklyroutinegymapp.shared.generated.resources.common_delete
 import myweeklyroutinegymapp.shared.generated.resources.common_deleted
 import myweeklyroutinegymapp.shared.generated.resources.common_done
-import myweeklyroutinegymapp.shared.generated.resources.common_edit
 import myweeklyroutinegymapp.shared.generated.resources.common_icon_optional
 import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_new
@@ -58,7 +58,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategoryUsage
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
+import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -114,7 +117,7 @@ fun ActivityCategoryContent(
             TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
         }
 
-        state.message?.let { CategoryMessageBanner(it, onConsumeMessage) }
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
         if (state.isEmpty) {
             EmptyState(
@@ -204,6 +207,18 @@ fun ActivityCategoryContent(
     }
 }
 
+/**
+ * One category.
+ *
+ * Same shape as a workout-log row: the card is the button, a swipe to the left asks to
+ * delete, and the trailing chevron says the row opens something. Two of the three
+ * buttons are therefore gone — Edit was what tapping the card now does, and Delete was
+ * what the swipe now does.
+ *
+ * [onArchive] keeps its button. It is the third thing you can do to a category and
+ * there is no third gesture to give it; hiding it behind one would make it
+ * undiscoverable to keep a symmetry nothing asked for.
+ */
 @Composable
 private fun CategoryRow(
     usage: ActivityCategoryUsage,
@@ -211,35 +226,50 @@ private fun CategoryRow(
     onArchive: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Column {
-                Text(
-                    text = listOfNotNull(usage.category.icon, usage.category.name).joinToString(" "),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+    SwipeToDelete(
+        label = stringResource(Res.string.common_delete),
+        onDelete = onDelete,
+    ) {
+        Card(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = listOfNotNull(usage.category.icon, usage.category.name)
+                            .joinToString(" "),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = if (usage.activityCount == 0L) {
+                            stringResource(Res.string.category_no_activities)
+                        } else {
+                            pluralStringResource(
+                                Res.plurals.plural_activities,
+                                usage.activityCount.toInt(),
+                                usage.activityCount.toString(),
+                            )
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = onArchive) {
+                        Text(stringResource(Res.string.common_archive))
+                    }
+                }
+                Icon(
+                    imageVector = GymIcons.ChevronRight,
+                    // Decorative: the card carries the click, so the row is announced
+                    // once rather than once for itself and once for an arrow.
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    text = if (usage.activityCount == 0L) {
-                        stringResource(Res.string.category_no_activities)
-                    } else {
-                        pluralStringResource(
-                            Res.plurals.plural_activities,
-                            usage.activityCount.toInt(),
-                            usage.activityCount.toString(),
-                        )
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onEdit) { Text(stringResource(Res.string.common_edit)) }
-                TextButton(onClick = onArchive) { Text(stringResource(Res.string.common_archive)) }
-                TextButton(onClick = onDelete) { Text(stringResource(Res.string.common_delete)) }
             }
         }
     }
@@ -288,45 +318,33 @@ private fun CategoryFormDialog(
     )
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun CategoryMessageBanner(message: CategoryMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        CategoryMessage.Saved -> stringResource(Res.string.common_saved)
-        CategoryMessage.NameBlank -> stringResource(Res.string.category_msg_name_blank)
-        CategoryMessage.NameTaken -> stringResource(Res.string.category_msg_name_taken)
-        is CategoryMessage.Deleted -> when (message.uncategorisedCount) {
-            0L -> stringResource(Res.string.common_deleted)
-            else -> stringResource(
-                Res.string.category_msg_deleted_count,
-                pluralStringResource(
-                    Res.plurals.plural_activities,
-                    message.uncategorisedCount.toInt(),
-                    message.uncategorisedCount.toString(),
-                ),
-            )
-        }
-
-        is CategoryMessage.Archived -> when (message.uncategorisedCount) {
-            0L -> stringResource(Res.string.common_archived)
-            else -> stringResource(
-                Res.string.category_msg_archived_count,
-                pluralStringResource(
-                    Res.plurals.plural_activities,
-                    message.uncategorisedCount.toInt(),
-                    message.uncategorisedCount.toString(),
-                ),
-            )
-        }
+private fun messageText(message: CategoryMessage): String = when (message) {
+    CategoryMessage.Saved -> stringResource(Res.string.common_saved)
+    CategoryMessage.NameBlank -> stringResource(Res.string.category_msg_name_blank)
+    CategoryMessage.NameTaken -> stringResource(Res.string.category_msg_name_taken)
+    is CategoryMessage.Deleted -> when (message.uncategorisedCount) {
+        0L -> stringResource(Res.string.common_deleted)
+        else -> stringResource(
+            Res.string.category_msg_deleted_count,
+            pluralStringResource(
+                Res.plurals.plural_activities,
+                message.uncategorisedCount.toInt(),
+                message.uncategorisedCount.toString(),
+            ),
+        )
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
+    is CategoryMessage.Archived -> when (message.uncategorisedCount) {
+        0L -> stringResource(Res.string.common_archived)
+        else -> stringResource(
+            Res.string.category_msg_archived_count,
+            pluralStringResource(
+                Res.plurals.plural_activities,
+                message.uncategorisedCount.toInt(),
+                message.uncategorisedCount.toString(),
+            ),
+        )
     }
 }

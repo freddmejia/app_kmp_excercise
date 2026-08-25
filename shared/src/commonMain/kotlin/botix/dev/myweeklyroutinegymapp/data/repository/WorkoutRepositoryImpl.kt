@@ -72,6 +72,14 @@ class WorkoutRepositoryImpl(
     override suspend fun updateNotes(sessionId: Long, notes: String?): Unit =
         withContext(dispatcher) { queries.updateSessionNotes(notes, sessionId) }
 
+    override suspend fun setDistanceTime(
+        sessionId: Long,
+        distanceMeters: Long?,
+        durationSeconds: Long?,
+    ): Unit = withContext(dispatcher) {
+        queries.setSessionDistanceTime(distanceMeters, durationSeconds, sessionId)
+    }
+
     override suspend fun deleteSession(id: Long): Unit = withContext(dispatcher) {
         // Entries first, in the same transaction, rather than relying on the FK's
         // ON DELETE CASCADE — that action depends on a driver-level pragma.

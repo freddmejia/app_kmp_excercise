@@ -30,6 +30,30 @@ sealed interface StartSessionResult {
     data object NotAStrengthActivity : StartSessionResult
 }
 
+/**
+ * The outcome of logging a distance/time session.
+ *
+ * A separate result type from [StartSessionResult] because this flow finishes in one
+ * step: there is no session left open to add to, so "started" would be a lie.
+ */
+sealed interface LogDistanceTimeResult {
+    data object Logged : LogDistanceTimeResult
+
+    data object ActivityNotFound : LogDistanceTimeResult
+
+    /** The mirror of [StartSessionResult.NotAStrengthActivity], pointing the other way. */
+    data object NotADistanceTimeActivity : LogDistanceTimeResult
+
+    /**
+     * Neither measure was given, or one of them was not positive.
+     *
+     * A ride of no distance in no time is not a training record — it is an empty form
+     * submitted. One of the two alone is allowed: a swim with no distance measured,
+     * or a route walked without timing it, are both real things to log.
+     */
+    data object NothingMeasured : LogDistanceTimeResult
+}
+
 sealed interface LogSetsResult {
     data object Logged : LogSetsResult
 
@@ -58,6 +82,48 @@ class StartOrResumeSessionUseCase(
         return StartSessionResult.Started(
             workouts.startOrResumeSession(activityId, epochDay, clock.nowMillis()),
         )
+    }
+}
+
+/**
+ * Logs a distance/time activity: one session, both measures, done.
+ *
+ * Deliberately not folded into [StartOrResumeSessionUseCase]. That one opens a
+ * session and leaves it open for muscles to be checked into over the course of a day;
+ * this one has everything it needs at the moment it is called. Sharing an entry point
+ * would mean a "start" that sometimes finishes and sometimes does not.
+ *
+ * It still goes through `startOrResumeSession` underneath, so logging the same
+ * activity twice on one day *corrects* that day rather than stacking a second row —
+ * matching the strength flow, where a day holds one session per activity.
+ */
+class LogDistanceTimeUseCase(
+    private val workouts: WorkoutRepository,
+    private val activities: ActivityRepository,
+    private val clock: Clock,
+) {
+    suspend operator fun invoke(
+        activityId: Long,
+        distanceMeters: Long?,
+        durationSeconds: Long?,
+        epochDay: Long = clock.today(),
+    ): LogDistanceTimeResult {
+        val activity = activities.getById(activityId)
+            ?: return LogDistanceTimeResult.ActivityNotFound
+        if (activity.measurementType != MeasurementType.DISTANCE_TIME) {
+            return LogDistanceTimeResult.NotADistanceTimeActivity
+        }
+        // Zero is rejected rather than stored: it reads as "measured, and it was
+        // none", which is never what was meant.
+        val distance = distanceMeters?.takeIf { it > 0L }
+        val duration = durationSeconds?.takeIf { it > 0L }
+        if (distance == null && duration == null) {
+            return LogDistanceTimeResult.NothingMeasured
+        }
+
+        val sessionId = workouts.startOrResumeSession(activityId, epochDay, clock.nowMillis())
+        workouts.setDistanceTime(sessionId, distance, duration)
+        return LogDistanceTimeResult.Logged
     }
 }
 

@@ -33,6 +33,7 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.CreateMuscleGroupU
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.CreateMuscleUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.DeleteMuscleUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.DeleteSessionUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogDistanceTimeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogMuscleSetsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveGroupVolumeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMuscleGroupsUseCase
@@ -136,6 +137,7 @@ val domainModule = module {
     // Workout logging
     factoryOf(::StartOrResumeSessionUseCase)
     factoryOf(::LogMuscleSetsUseCase)
+    factoryOf(::LogDistanceTimeUseCase)
     factoryOf(::SetMuscleSetsUseCase)
     factoryOf(::RemoveMuscleFromSessionUseCase)
     factoryOf(::ObserveSessionDetailUseCase)

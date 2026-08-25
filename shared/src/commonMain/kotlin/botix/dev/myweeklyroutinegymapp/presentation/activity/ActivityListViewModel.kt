@@ -75,8 +75,8 @@ data class ActivityListUiState(
     val today: Long = 0,
     /** Days of the visible week that have a session, for the strip's markers. */
     val daysWithSessions: Set<Long> = emptyList<Long>().toSet(),
-    /** Per-activity totals for the visible week; absent means not trained. */
-    val weekVolume: Map<Long, ActivityVolume> = emptyMap(),
+    /** Per-activity totals for [selectedDay] alone; absent means not trained that day. */
+    val dayVolume: Map<Long, ActivityVolume> = emptyMap(),
     val isLoading: Boolean = true,
     val message: ActivityMessage? = null,
 ) {
@@ -85,24 +85,35 @@ data class ActivityListUiState(
     val isToday: Boolean get() = selectedDay == today
 
     /**
-     * The week splits the list rather than truncating it.
+     * The selected day splits the list rather than truncating it.
+     *
+     * It follows the *day*, not the week the day sits in. A strip you can tap seven
+     * cells of, that answers all seven identically, is not a filter — it was showing
+     * "Trained 24–30 Aug" whichever cell you pressed, so the only way to ask "what did
+     * I do on Wednesday" was to read the log screen instead.
      *
      * This screen is also where activities are created, archived and deleted, so
-     * nothing may become unreachable because of the week on screen — an activity made
+     * nothing may become unreachable because of the day on screen — an activity made
      * seconds ago has trained nothing and must still be editable. Showing both halves
-     * keeps the week meaningful without the catalogue losing rows.
+     * keeps the day meaningful without the catalogue losing rows.
      */
-    val trainedThisWeek: List<Activity> get() = activities.filter { it.id in weekVolume }
+    val trainedOnDay: List<Activity> get() = activities.filter { it.id in dayVolume }
 
-    val untrainedThisWeek: List<Activity> get() = activities.filterNot { it.id in weekVolume }
+    val untrainedOnDay: List<Activity> get() = activities.filterNot { it.id in dayVolume }
     /** Name lookup for the row badge; a category deleted mid-scroll simply drops out. */
     val categoryNamesById: Map<Long, String> get() = categories.associate { it.id to it.name }
 }
 
 
 
-/** The week-scoped reads, kept together so they can never describe different weeks. */
-private data class WeekState(
+/**
+ * The day-scoped reads, kept together so they can never describe different days.
+ *
+ * [markers] is the exception and is deliberately week-wide: it paints the dots on the
+ * strip, which have to say which *other* days hold something — a marker set narrowed
+ * to the selected day would only ever mark the cell you are already on.
+ */
+private data class DayState(
     val day: Long,
     val volume: Map<Long, ActivityVolume>,
     val markers: Set<Long>,
@@ -133,14 +144,16 @@ class ActivityListViewModel(
     private val today = clock.today()
     private val selectedDay = MutableStateFlow(today)
 
-    /** The week's reads, resolved together so they can never describe different weeks. */
-    private val weekState = selectedDay.flatMapLatest { day ->
+    /** The day's reads, resolved together so they can never describe different days. */
+    private val dayState = selectedDay.flatMapLatest { day ->
         val start = weekStartOf(day)
         combine(
-            observeActivityVolume(start, start + WEEK - 1),
+            // One day, both ends — this is what makes the strip a filter. The
+            // markers below stay week-wide; they are the strip's own dots.
+            observeActivityVolume(day, day),
             observeSessionDays(start, start + WEEK - 1),
         ) { volume, markers ->
-            WeekState(day, volume.associateBy { it.activityId }, markers)
+            DayState(day, volume.associateBy { it.activityId }, markers)
         }
     }
 
@@ -180,15 +193,15 @@ class ActivityListViewModel(
         partial.copy(muscleSections = sections)
     }.combine(observeMuscleLinks()) { partial, links ->
         partial.copy(musclesByActivity = links)
-    }.combine(weekState) { partial, week ->
+    }.combine(dayState) { partial, day ->
         // The split happens in the state's own getters rather than here: the activity
-        // list and the week's volume come from different tables, and absence from the
+        // list and the day's volume come from different tables, and absence from the
         // volume map *is* "not trained", so it is a set membership test on read.
         partial.copy(
-            selectedDay = week.day,
+            selectedDay = day.day,
             today = today,
-            daysWithSessions = week.markers,
-            weekVolume = week.volume,
+            daysWithSessions = day.markers,
+            dayVolume = day.volume,
         )
     }.stateIn(
         scope = viewModelScope,

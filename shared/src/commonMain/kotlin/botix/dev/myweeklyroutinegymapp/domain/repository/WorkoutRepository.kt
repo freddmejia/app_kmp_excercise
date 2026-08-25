@@ -45,6 +45,14 @@ interface WorkoutRepository {
 
     suspend fun updateNotes(sessionId: Long, notes: String?)
 
+    /**
+     * Records what a distance/time session covered, in metres and seconds.
+     *
+     * Replaces rather than accumulates: a second ride on the same day is a second
+     * session, so the only reason to write these twice is to correct them.
+     */
+    suspend fun setDistanceTime(sessionId: Long, distanceMeters: Long?, durationSeconds: Long?)
+
     /** Deleting a session removes its entries via the cascade. */
     suspend fun deleteSession(id: Long)
 

@@ -102,7 +102,50 @@ class GymDatabaseMigrationTest {
         // Guards the migration files' existence. Each .sqm adds one; delete one and
         // this drops back, every installed app keeps its old database, never creates
         // the new table, and crashes on the first query against it.
-        assertEquals(3L, GymDatabase.Schema.version)
+        assertEquals(4L, GymDatabase.Schema.version)
+    }
+
+    @Test
+    fun migratingFromVersionThreeAddsOnlyTheDistanceAndTimeColumns() {
+        // The upgrade path for anyone already on the categories + muscle-link build.
+        val fresh = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        GymDatabase.Schema.create(fresh)
+
+        val migrated = v1Database()
+        GymDatabase.Schema.migrate(migrated, 1, 3)
+        assertTrue(!migrated.columnsOf("workout_session").contains("distance_meters"))
+
+        GymDatabase.Schema.migrate(migrated, 3, 4)
+
+        // Same columns as a fresh install, and no table gained or lost on the way.
+        assertEquals(fresh.columnsOf("workout_session"), migrated.columnsOf("workout_session"))
+        assertEquals(fresh.tableNames(), migrated.tableNames())
+    }
+
+    @Test
+    fun existingSessionsSurviveWithNoDistanceOrTime() {
+        val driver = v1Database()
+        driver.execute(
+            null,
+            "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+                "VALUES ('Gym', 'STRENGTH', NULL, NULL, 0, 0, 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) " +
+                "VALUES (1, 20000, NULL, 7)",
+            0,
+        )
+
+        GymDatabase.Schema.migrate(driver, 1, GymDatabase.Schema.version)
+
+        val stored = createDatabase(driver).workoutSessionQueries.selectSessionById(1).executeAsOne()
+        assertEquals(20_000L, stored.date_epoch_day)
+        // Null, not zero: a strength session never measured a distance, and a zero
+        // would claim it covered none.
+        assertNull(stored.distance_meters)
+        assertNull(stored.duration_seconds)
     }
 
     @Test
@@ -214,6 +257,17 @@ class GymDatabaseMigrationTest {
     private fun JdbcSqliteDriver.tableNames(): List<String> = executeQuery(
         identifier = null,
         sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        parameters = 0,
+        mapper = { cursor ->
+            val names = mutableListOf<String>()
+            while (cursor.next().value) names += cursor.getString(0)!!
+            app.cash.sqldelight.db.QueryResult.Value(names.toList())
+        },
+    ).value
+
+    private fun JdbcSqliteDriver.columnsOf(table: String): List<String> = executeQuery(
+        identifier = null,
+        sql = "SELECT name FROM pragma_table_info('" + table + "') ORDER BY name",
         parameters = 0,
         mapper = { cursor ->
             val names = mutableListOf<String>()

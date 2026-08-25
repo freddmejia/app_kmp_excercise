@@ -1,11 +1,20 @@
--- A strength session: a header plus one row per muscle worked. No load, no reps
--- (TRAINING.md §1) — the atomic unit is the set, split effective vs. warmup.
+-- A session: a header, plus whatever measures the activity it belongs to.
+--
+-- A STRENGTH session is measured by the session_muscle rows hanging off it — no load,
+-- no reps (TRAINING.md §1), the atomic unit is the set, split effective vs. warmup.
+--
+-- A DISTANCE_TIME session is measured by the two columns below and has no
+-- session_muscle rows at all. They are metres and seconds, never km or minutes:
+-- units are a display choice, so changing one is formatting rather than a migration.
+-- Both are null for every strength session.
 CREATE TABLE workout_session (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_id    INTEGER NOT NULL REFERENCES activity(id),
-    date_epoch_day INTEGER NOT NULL,
-    notes          TEXT,
-    created_at     INTEGER NOT NULL
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    activity_id      INTEGER NOT NULL REFERENCES activity(id),
+    date_epoch_day   INTEGER NOT NULL,
+    notes            TEXT,
+    created_at       INTEGER NOT NULL,
+    distance_meters  INTEGER,
+    duration_seconds INTEGER
 );
 
 -- The check IS the row: creating a session_muscle means "I trained this muscle
@@ -47,7 +56,8 @@ SELECT ws.id, ws.activity_id, a.name AS activity_name, ws.date_epoch_day, ws.not
        -- schema does the same so set counts stay Long end to end.
        CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
        CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
-       COUNT(sm.id) AS muscle_count
+       COUNT(sm.id) AS muscle_count,
+       ws.distance_meters, ws.duration_seconds
 FROM workout_session ws
 JOIN activity a ON a.id = ws.activity_id
 LEFT JOIN session_muscle sm ON sm.session_id = ws.id
@@ -64,6 +74,17 @@ VALUES (?, ?, ?, ?);
 
 updateSessionNotes:
 UPDATE workout_session SET notes = ? WHERE id = ?;
+
+-- A distance/time session's measurements, set in one write.
+--
+-- Replaces rather than accumulates, unlike a muscle's sets: two rides in a day are
+-- two rides, so the log screen creates a second session for the second one instead of
+-- adding its kilometres onto the first. Editing an existing ride therefore means
+-- correcting a number, which is a replace.
+setSessionDistanceTime:
+UPDATE workout_session
+SET distance_meters = :distanceMeters, duration_seconds = :durationSeconds
+WHERE id = :sessionId;
 
 -- Entries cascade via the FK, provided PRAGMA foreign_keys is on (the driver
 -- factory enables it on both platforms).
@@ -137,7 +158,14 @@ SELECT ws.activity_id,
        CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
        CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
        COUNT(DISTINCT ws.date_epoch_day) AS distinct_days,
-       COUNT(DISTINCT ws.id) AS session_count
+       COUNT(DISTINCT ws.id) AS session_count,
+       -- Null, not zero, when the activity has no distance/time sessions in range:
+       -- the row then shows sets, and "0 km" would be a measurement it never took.
+       -- CAST for the same reason as the set sums above: SQLDelight types a bare
+       -- SUM() as REAL. CAST(NULL AS INTEGER) is still NULL, so the "never measured"
+       -- case survives the cast intact.
+       CAST(SUM(ws.distance_meters) AS INTEGER) AS distance_meters,
+       CAST(SUM(ws.duration_seconds) AS INTEGER) AS duration_seconds
 FROM workout_session ws
 LEFT JOIN session_muscle sm ON sm.session_id = ws.id
 WHERE ws.date_epoch_day BETWEEN :fromDay AND :toDay

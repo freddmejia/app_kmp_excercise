@@ -38,12 +38,14 @@ import myweeklyroutinegymapp.shared.generated.resources.activities_categories
 import myweeklyroutinegymapp.shared.generated.resources.activities_empty
 import myweeklyroutinegymapp.shared.generated.resources.activities_empty_hint
 import myweeklyroutinegymapp.shared.generated.resources.activities_empty_in_category
-import myweeklyroutinegymapp.shared.generated.resources.activities_not_trained_week
-import myweeklyroutinegymapp.shared.generated.resources.activities_nothing_trained_week
+import myweeklyroutinegymapp.shared.generated.resources.activities_not_trained_day
+import myweeklyroutinegymapp.shared.generated.resources.activities_nothing_trained_day
+import myweeklyroutinegymapp.shared.generated.resources.activities_nothing_trained_day_hint
 import myweeklyroutinegymapp.shared.generated.resources.activities_title
-import myweeklyroutinegymapp.shared.generated.resources.activities_trained_week
+import myweeklyroutinegymapp.shared.generated.resources.activities_trained_day
 import myweeklyroutinegymapp.shared.generated.resources.activities_uncategorised
-import myweeklyroutinegymapp.shared.generated.resources.activities_week_volume
+import myweeklyroutinegymapp.shared.generated.resources.activities_day_distance
+import myweeklyroutinegymapp.shared.generated.resources.activities_day_volume
 import myweeklyroutinegymapp.shared.generated.resources.activity_category_for
 import myweeklyroutinegymapp.shared.generated.resources.activity_category_label
 import myweeklyroutinegymapp.shared.generated.resources.activity_filter_active
@@ -80,7 +82,6 @@ import myweeklyroutinegymapp.shared.generated.resources.common_unarchive
 import myweeklyroutinegymapp.shared.generated.resources.measure_distance
 import myweeklyroutinegymapp.shared.generated.resources.measure_simple
 import myweeklyroutinegymapp.shared.generated.resources.measure_strength
-import myweeklyroutinegymapp.shared.generated.resources.plural_days
 import myweeklyroutinegymapp.shared.generated.resources.plural_muscles
 import myweeklyroutinegymapp.shared.generated.resources.plural_sessions
 import org.jetbrains.compose.resources.StringResource
@@ -96,10 +97,14 @@ import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
+import botix.dev.myweeklyroutinegymapp.presentation.common.format1
+import botix.dev.myweeklyroutinegymapp.presentation.common.formatMeasure
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
-import botix.dev.myweeklyroutinegymapp.presentation.common.weekLabelOf
+import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -192,9 +197,7 @@ fun ActivityListContent(
             onGoToToday = onGoToToday,
         )
 
-        state.message?.let { message ->
-            MessageBanner(message = message, onDismiss = onConsumeMessage)
-        }
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
         when {
             state.isLoading -> LoadingState()
@@ -209,23 +212,41 @@ fun ActivityListContent(
                 hint = stringResource(Res.string.activities_empty_hint),
             )
 
+            // A day with no sessions shows nothing, rather than the whole catalogue
+            // under a header saying nothing was trained. The header said "empty" while
+            // the screen below it was full, and the eye believes the screen.
+            //
+            // The cost is real and deliberate: on such a day no activity row is on
+            // screen, so editing, archiving and deleting one means first picking a day
+            // it was trained on. Creating is unaffected — New is in the header, which
+            // is why the hint points there rather than at the list.
+            state.trainedOnDay.isEmpty() -> EmptyState(
+                text = stringResource(
+                    Res.string.activities_nothing_trained_day,
+                    state.selectedDay.asFullDate(),
+                ),
+                hint = stringResource(Res.string.activities_nothing_trained_day_hint),
+            )
+
             // weight(1f) so the pinned header above can grow without squeezing
             // the list to nothing.
             else -> LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                val trained = state.trainedThisWeek
-                val untrained = state.untrainedThisWeek
+                // Non-empty by the time we get here — the branch above catches the
+                // day where nothing was trained.
+                val trained = state.trainedOnDay
+                val untrained = state.untrainedOnDay
 
-                // Headed only when both halves exist. With everything trained — or
-                // nothing — a header would label a division that is not there.
-                if (trained.isNotEmpty() && untrained.isNotEmpty()) {
+                // Headed only when both halves exist. With everything trained, a
+                // header would label a division that is not there.
+                if (untrained.isNotEmpty()) {
                     item(key = "trained-header") {
                         SectionHeader(
                             stringResource(
-                                Res.string.activities_trained_week,
-                                weekLabelOf(state.selectedDay),
+                                Res.string.activities_trained_day,
+                                state.selectedDay.asFullDate(),
                             ),
                         )
                     }
@@ -235,7 +256,7 @@ fun ActivityListContent(
                         activity = activity,
                         categoryName = activity.categoryId?.let { state.categoryNamesById[it] },
                         muscleCount = state.musclesByActivity[activity.id]?.size ?: 0,
-                        weekVolume = state.weekVolume[activity.id],
+                        dayVolume = state.dayVolume[activity.id],
                         onChangeCategory = { recategorising = activity },
                         onChangeMuscles = { editingMuscles = activity },
                         onSetArchived = onSetArchived,
@@ -245,26 +266,18 @@ fun ActivityListContent(
 
                 if (untrained.isNotEmpty()) {
                     item(key = "untrained-header") {
-                        SectionHeader(
-                            if (trained.isEmpty()) {
-                                stringResource(
-                                    Res.string.activities_nothing_trained_week,
-                                    weekLabelOf(state.selectedDay),
-                                )
-                            } else {
-                                stringResource(Res.string.activities_not_trained_week)
-                            },
-                        )
+                        SectionHeader(stringResource(Res.string.activities_not_trained_day))
                     }
                 }
-                // Listed, not hidden: every management action stays reachable no
-                // matter which week is on screen.
+                // The contrast half: what is still open on a day you did train. It
+                // earns its place here precisely because something else on screen was
+                // trained — which is why it does not appear on an empty day.
                 items(untrained, key = { "untrained-${it.id}" }) { activity ->
                     ActivityRow(
                         activity = activity,
                         categoryName = activity.categoryId?.let { state.categoryNamesById[it] },
                         muscleCount = state.musclesByActivity[activity.id]?.size ?: 0,
-                        weekVolume = null,
+                        dayVolume = null,
                         onChangeCategory = { recategorising = activity },
                         onChangeMuscles = { editingMuscles = activity },
                         onSetArchived = onSetArchived,
@@ -356,7 +369,7 @@ private fun ActivityRow(
     activity: Activity,
     categoryName: String?,
     muscleCount: Int,
-    weekVolume: ActivityVolume?,
+    dayVolume: ActivityVolume?,
     onChangeCategory: () -> Unit,
     onChangeMuscles: () -> Unit,
     onSetArchived: (Long, Boolean) -> Unit,
@@ -366,97 +379,115 @@ private fun ActivityRow(
     // strength log picker, and the other two types never open it — an always-visible
     // control that silently does nothing is worse than an absent one.
     val supportsMuscles = activity.measurementType == MeasurementType.STRENGTH
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+    // Swiping requests the delete; the domain still refuses it while sessions
+    // reference the activity, and says so in a snackbar. That refusal is exactly why
+    // the row must not animate itself away on release.
+    SwipeToDelete(
+        label = stringResource(Res.string.common_delete),
+        onDelete = { onDelete(activity.id) },
+    ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column {
-                    Text(
-                        text = listOfNotNull(activity.icon, activity.name).joinToString(" "),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        // Category and measurement type on one line, in that order:
-                        // the category is the label you chose, the type is the
-                        // contract the app enforces.
-                        text = listOfNotNull(
-                            categoryName,
-                            activity.measurementType.label(),
-                            // Absent rather than "0 muscles": no links means "not
-                            // specified", and the picker falls back to everything.
-                            if (supportsMuscles && muscleCount > 0) {
-                                pluralStringResource(
-                                    Res.plurals.plural_muscles,
-                                    muscleCount,
-                                    muscleCount.toString(),
-                                )
-                            } else {
-                                null
-                            },
-                        ).joinToString(" · "),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (activity.isArchived) {
-                    AssistChip(onClick = {}, label = { Text(stringResource(Res.string.activities_archived_badge)) })
-                }
-            }
-
-            // Only in week mode, where it is present precisely because the activity
-            // was trained — so there is never a "0 sets" row to explain away.
-            weekVolume?.let { volume ->
-                Text(
-                    stringResource(
-                        Res.string.activities_week_volume,
-                        volume.effectiveSets.toString(),
-                        volume.warmupSets.toString(),
-                        pluralStringResource(
-                            Res.plurals.plural_days,
-                            volume.distinctDays.toInt(),
-                            volume.distinctDays.toString(),
-                        ),
-                        pluralStringResource(
-                            Res.plurals.plural_sessions,
-                            volume.sessionCount.toInt(),
-                            volume.sessionCount.toString(),
-                        ),
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onChangeCategory) {
-                    Text(stringResource(Res.string.activity_category_label))
-                }
-                if (supportsMuscles) {
-                    TextButton(onClick = onChangeMuscles) {
-                        Text(stringResource(Res.string.activity_muscles_label))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            text = listOfNotNull(activity.icon, activity.name).joinToString(" "),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            // Category and measurement type on one line, in that order:
+                            // the category is the label you chose, the type is the
+                            // contract the app enforces.
+                            text = listOfNotNull(
+                                categoryName,
+                                activity.measurementType.label(),
+                                // Absent rather than "0 muscles": no links means "not
+                                // specified", and the picker falls back to everything.
+                                if (supportsMuscles && muscleCount > 0) {
+                                    pluralStringResource(
+                                        Res.plurals.plural_muscles,
+                                        muscleCount,
+                                        muscleCount.toString(),
+                                    )
+                                } else {
+                                    null
+                                },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (activity.isArchived) {
+                        AssistChip(onClick = {}, label = { Text(stringResource(Res.string.activities_archived_badge)) })
                     }
                 }
-                TextButton(onClick = { onSetArchived(activity.id, !activity.isArchived) }) {
+
+                // Present precisely because the activity was trained on the selected
+                // day — so there is never a "0 sets" row to explain away.
+                //
+                // No day count any more: over a single day it was always "1 day",
+                // which is the one fact the section header has already stated.
+                dayVolume?.let { volume ->
                     Text(
-                        stringResource(
-                            if (activity.isArchived) {
-                                Res.string.common_unarchive
-                            } else {
-                                Res.string.common_archive
-                            },
-                        ),
+                        // Sets mean nothing for a ride and kilometres mean nothing for
+                        // a bench press, so the line follows what was actually
+                        // measured rather than the activity's declared type — a
+                        // session logged before a type change still reads correctly.
+                        if (volume.isDistanceTime) {
+                            stringResource(
+                                Res.string.activities_day_distance,
+                                volume.distanceMeters?.let { (it / 1000.0).formatMeasure() } ?: "0",
+                                volume.durationSeconds?.let { (it / 60.0).formatMeasure() } ?: "0",
+                                pluralStringResource(
+                                    Res.plurals.plural_sessions,
+                                    volume.sessionCount.toInt(),
+                                    volume.sessionCount.toString(),
+                                ),
+                            )
+                        } else {
+                            stringResource(
+                                Res.string.activities_day_volume,
+                                volume.effectiveSets.toString(),
+                                volume.warmupSets.toString(),
+                                pluralStringResource(
+                                    Res.plurals.plural_sessions,
+                                    volume.sessionCount.toInt(),
+                                    volume.sessionCount.toString(),
+                                ),
+                            )
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                // Offered even when it will be refused: the refusal carries the
-                // session count, which is what tells you to archive instead.
-                TextButton(onClick = { onDelete(activity.id) }) {
-                    Text(stringResource(Res.string.common_delete))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onChangeCategory) {
+                        Text(stringResource(Res.string.activity_category_label))
+                    }
+                    if (supportsMuscles) {
+                        TextButton(onClick = onChangeMuscles) {
+                            Text(stringResource(Res.string.activity_muscles_label))
+                        }
+                    }
+                    TextButton(onClick = { onSetArchived(activity.id, !activity.isArchived) }) {
+                        Text(
+                            stringResource(
+                                if (activity.isArchived) {
+                                    Res.string.common_unarchive
+                                } else {
+                                    Res.string.common_archive
+                                },
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -619,42 +650,30 @@ private fun PickCategoryDialog(
     )
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun MessageBanner(message: ActivityMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        ActivityMessage.NameBlank -> stringResource(Res.string.activity_msg_name_blank)
-        ActivityMessage.NameTaken -> stringResource(Res.string.activity_msg_name_taken)
-        ActivityMessage.Saved -> stringResource(Res.string.common_saved)
-        ActivityMessage.Deleted -> stringResource(Res.string.common_deleted)
-        is ActivityMessage.DeleteBlocked -> stringResource(
-            Res.string.activity_msg_delete_blocked,
-            pluralStringResource(
-                Res.plurals.plural_sessions,
-                message.sessionCount.toInt(),
-                message.sessionCount.toString(),
-            ),
-        )
+private fun messageText(message: ActivityMessage): String = when (message) {
+    ActivityMessage.NameBlank -> stringResource(Res.string.activity_msg_name_blank)
+    ActivityMessage.NameTaken -> stringResource(Res.string.activity_msg_name_taken)
+    ActivityMessage.Saved -> stringResource(Res.string.common_saved)
+    ActivityMessage.Deleted -> stringResource(Res.string.common_deleted)
+    is ActivityMessage.DeleteBlocked -> stringResource(
+        Res.string.activity_msg_delete_blocked,
+        pluralStringResource(
+            Res.plurals.plural_sessions,
+            message.sessionCount.toInt(),
+            message.sessionCount.toString(),
+        ),
+    )
 
-        is ActivityMessage.MeasurementTypeLocked -> stringResource(
-            Res.string.activity_msg_type_locked,
-            pluralStringResource(
-                Res.plurals.plural_sessions,
-                message.sessionCount.toInt(),
-                message.sessionCount.toString(),
-            ),
-        )
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
-    }
+    is ActivityMessage.MeasurementTypeLocked -> stringResource(
+        Res.string.activity_msg_type_locked,
+        pluralStringResource(
+            Res.plurals.plural_sessions,
+            message.sessionCount.toInt(),
+            message.sessionCount.toString(),
+        ),
+    )
 }
 
 private fun MeasurementType.labelRes(): StringResource = when (this) {

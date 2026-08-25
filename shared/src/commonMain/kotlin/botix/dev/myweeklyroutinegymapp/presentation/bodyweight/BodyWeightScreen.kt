@@ -66,6 +66,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.WeightTrend
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.BodyWeightRangePreset
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
@@ -144,6 +145,8 @@ fun BodyWeightContent(
         )
         PresetRow(state.preset, onSelectPreset)
 
+        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
+
         // weight(1f), not "whatever is left over": a plain nested list is measured
         // with the remaining constraints and collapses to nothing once the header
         // grows — which is exactly what adding the strip did to the history here.
@@ -158,10 +161,6 @@ fun BodyWeightContent(
                     isFuture = state.selectedDayIsFuture,
                     onLog = onLog,
                 )
-            }
-
-            state.message?.let { message ->
-                item(key = "message") { MessageBanner(message, onConsumeMessage) }
             }
 
             item(key = "summary") { SummaryCard(state) }
@@ -371,23 +370,11 @@ private fun HistoryRow(entry: BodyWeightEntry, onDelete: (Long) -> Unit) {
     }
 }
 
+/** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
-private fun MessageBanner(message: BodyWeightMessage, onDismiss: () -> Unit) {
-    val text = when (message) {
-        BodyWeightMessage.Logged -> stringResource(Res.string.log_msg_logged)
-        BodyWeightMessage.Deleted -> stringResource(Res.string.common_deleted)
-        BodyWeightMessage.InvalidWeight -> stringResource(Res.string.weight_msg_invalid)
-        BodyWeightMessage.FutureDay -> stringResource(Res.string.weight_future)
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_ok)) }
-        }
-    }
+private fun messageText(message: BodyWeightMessage): String = when (message) {
+    BodyWeightMessage.Logged -> stringResource(Res.string.log_msg_logged)
+    BodyWeightMessage.Deleted -> stringResource(Res.string.common_deleted)
+    BodyWeightMessage.InvalidWeight -> stringResource(Res.string.weight_msg_invalid)
+    BodyWeightMessage.FutureDay -> stringResource(Res.string.weight_future)
 }

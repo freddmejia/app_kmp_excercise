@@ -50,9 +50,33 @@ data class SessionSummary(
     val warmupSets: Long,
     /** How many muscles are checked. Zero means the session was started and left. */
     val muscleCount: Long,
+    /** Metres, for a [MeasurementType.DISTANCE_TIME] session. Null for a strength one. */
+    val distanceMeters: Long? = null,
+    /** Seconds, for a [MeasurementType.DISTANCE_TIME] session. Null for a strength one. */
+    val durationSeconds: Long? = null,
 ) {
+    /**
+     * A session measured by distance and time rather than by muscles.
+     *
+     * Decided by what the row holds, not by looking the activity's type up again: a
+     * summary that carries either measure describes that kind of session, and asking
+     * two tables the same question is how they come to disagree.
+     */
+    val isDistanceTime: Boolean get() = distanceMeters != null || durationSeconds != null
+
     /** Nothing logged yet — the card says so rather than showing a bare "0". */
-    val isEmpty: Boolean get() = muscleCount == 0L
+    val isEmpty: Boolean get() = if (isDistanceTime) false else muscleCount == 0L
+
+    /** Seconds per kilometre, the number a runner or a cyclist actually compares. */
+    val paceSecondsPerKm: Double?
+        get() {
+            val metres = distanceMeters ?: return null
+            val seconds = durationSeconds ?: return null
+            // Both guards matter: a ride saved with only one of the two measures, or
+            // with a zero distance, would otherwise divide by zero and render as
+            // "Infinity /km".
+            return if (metres <= 0L || seconds <= 0L) null else seconds * 1000.0 / metres
+        }
 }
 
 /** Totals for one session, as shown in its summary. */
@@ -93,7 +117,14 @@ data class ActivityVolume(
     /** Distinct days trained, not sessions — twice in a day is still one day. */
     val distinctDays: Long,
     val sessionCount: Long,
-)
+    /** Metres over the window, summed. Null when nothing in it measured distance. */
+    val distanceMeters: Long? = null,
+    /** Seconds over the window, summed. Null when nothing in it measured time. */
+    val durationSeconds: Long? = null,
+) {
+    /** Show kilometres and minutes instead of set counts. */
+    val isDistanceTime: Boolean get() = distanceMeters != null || durationSeconds != null
+}
 
 /** Volume for a whole group: the sum of all its leaves, "General" included. */
 data class GroupVolume(

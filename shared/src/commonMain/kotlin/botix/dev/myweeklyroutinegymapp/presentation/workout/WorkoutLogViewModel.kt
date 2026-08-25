@@ -13,6 +13,8 @@ import botix.dev.myweeklyroutinegymapp.domain.model.UntrainedMuscle
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivitiesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.DeleteSessionUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogDistanceTimeResult
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogDistanceTimeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogMuscleSetsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.MusclePickerView
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.includingChecked
@@ -40,6 +42,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
 
 sealed interface WorkoutMessage {
     data object Logged : WorkoutMessage
@@ -52,12 +55,17 @@ sealed interface WorkoutMessage {
 
     /** This form only fits STRENGTH activities; another type needs its own screen. */
     data object NotAStrengthActivity : WorkoutMessage
+
+    /** A distance/time log with neither a distance nor a time in it. */
+    data object NothingMeasured : WorkoutMessage
 }
 
 data class WorkoutLogUiState(
     val sessionId: Long? = null,
-    /** Only STRENGTH activities: the other types do not use this form. */
+    /** Only STRENGTH activities: they are the ones that open the muscle picker. */
     val strengthActivities: List<Activity> = emptyList(),
+    /** DISTANCE_TIME activities, which log a distance and a time in one dialog. */
+    val distanceActivities: List<Activity> = emptyList(),
     val selectedActivityId: Long? = null,
     val sections: List<MuscleSection> = emptyList(),
     /**
@@ -121,6 +129,7 @@ class WorkoutLogViewModel(
     private val observeSessionDays: ObserveSessionDaysUseCase,
     private val observeDayLog: ObserveDayLogUseCase,
     private val deleteSession: DeleteSessionUseCase,
+    private val logDistanceTimeUseCase: LogDistanceTimeUseCase,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -199,6 +208,9 @@ class WorkoutLogViewModel(
         // second step rather than forcing the rest into a nested shape.
         partial.copy(
             strengthActivities = activities.filter { it.measurementType == MeasurementType.STRENGTH },
+            distanceActivities = activities.filter {
+                it.measurementType == MeasurementType.DISTANCE_TIME
+            },
         )
     }.combine(selectedActivityId) { partial, activityId ->
         partial.copy(selectedActivityId = activityId)
@@ -269,6 +281,37 @@ class WorkoutLogViewModel(
                 StartSessionResult.ActivityNotFound -> message.value = WorkoutMessage.ActivityNotFound
                 StartSessionResult.NotAStrengthActivity ->
                     message.value = WorkoutMessage.NotAStrengthActivity
+            }
+        }
+    }
+
+    /**
+     * Logs a distance/time activity on the selected day, in one step.
+     *
+     * Takes kilometres and minutes because that is what the form collects, and
+     * converts here: metres and seconds are what the database holds, and the
+     * conversion belongs on the boundary between the two rather than in the dialog.
+     *
+     * No session is left open afterwards — there is nothing further to add to it —
+     * so unlike [openSession] this does not touch [sessionId].
+     */
+    fun logDistanceTime(activityId: Long, kilometres: Double?, minutes: Double?) {
+        viewModelScope.launch {
+            val result = logDistanceTimeUseCase(
+                activityId = activityId,
+                // Rounded, not truncated: 20.55 km is 20550 m, and dropping the
+                // remainder would quietly shorten every ride by up to a metre.
+                distanceMeters = kilometres?.let { (it * 1000).roundToLong() },
+                durationSeconds = minutes?.let { (it * 60).roundToLong() },
+                epochDay = selectedDay.value,
+            )
+            message.value = when (result) {
+                LogDistanceTimeResult.Logged -> WorkoutMessage.Logged
+                LogDistanceTimeResult.ActivityNotFound -> WorkoutMessage.ActivityNotFound
+                LogDistanceTimeResult.NothingMeasured -> WorkoutMessage.NothingMeasured
+                // Reachable only if an activity's type changed under an open dialog.
+                LogDistanceTimeResult.NotADistanceTimeActivity ->
+                    WorkoutMessage.NotAStrengthActivity
             }
         }
     }

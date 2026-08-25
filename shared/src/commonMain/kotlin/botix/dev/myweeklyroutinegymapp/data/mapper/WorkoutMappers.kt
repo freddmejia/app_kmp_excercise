@@ -85,6 +85,8 @@ internal fun SelectDaySummaries.toDomain(): SessionSummary = SessionSummary(
     effectiveSets = effective_sets,
     warmupSets = warmup_sets,
     muscleCount = muscle_count,
+    distanceMeters = distance_meters,
+    durationSeconds = duration_seconds,
 )
 
 internal fun VolumePerActivityInRange.toDomain(): ActivityVolume = ActivityVolume(
@@ -93,4 +95,6 @@ internal fun VolumePerActivityInRange.toDomain(): ActivityVolume = ActivityVolum
     warmupSets = warmup_sets,
     distinctDays = distinct_days,
     sessionCount = session_count,
+    distanceMeters = distance_meters,
+    durationSeconds = duration_seconds,
 )
