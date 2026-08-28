@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.categories_empty
 import myweeklyroutinegymapp.shared.generated.resources.categories_empty_hint
-import myweeklyroutinegymapp.shared.generated.resources.categories_title
 import myweeklyroutinegymapp.shared.generated.resources.category_delete_count
 import myweeklyroutinegymapp.shared.generated.resources.category_delete_none
 import myweeklyroutinegymapp.shared.generated.resources.category_delete_title
@@ -44,7 +43,6 @@ import myweeklyroutinegymapp.shared.generated.resources.common_archived
 import myweeklyroutinegymapp.shared.generated.resources.common_cancel
 import myweeklyroutinegymapp.shared.generated.resources.common_delete
 import myweeklyroutinegymapp.shared.generated.resources.common_deleted
-import myweeklyroutinegymapp.shared.generated.resources.common_done
 import myweeklyroutinegymapp.shared.generated.resources.common_icon_optional
 import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_new
@@ -59,14 +57,13 @@ import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategoryUsage
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun ActivityCategoryScreen(
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ActivityCategoryViewModel = koinViewModel(),
 ) {
@@ -74,7 +71,6 @@ fun ActivityCategoryScreen(
 
     ActivityCategoryContent(
         state = state,
-        onBack = onBack,
         onCreate = { name, icon -> viewModel.create(name, icon) },
         onRename = { id, name, icon -> viewModel.rename(id, name, icon) },
         onArchive = { id -> viewModel.setArchived(id, true) },
@@ -91,7 +87,6 @@ fun ActivityCategoryScreen(
 @Composable
 fun ActivityCategoryContent(
     state: ActivityCategoryUiState,
-    onBack: () -> Unit,
     onCreate: (String, String?) -> Unit,
     onRename: (Long, String, String?) -> Unit,
     onArchive: (Long) -> Unit,
@@ -112,9 +107,8 @@ fun ActivityCategoryContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenHeader(title = stringResource(Res.string.categories_title)) {
+        ScreenActions {
             Button(onClick = { createOpen = true }) { Text(stringResource(Res.string.common_new)) }
-            TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
         }
 
         MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)

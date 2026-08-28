@@ -93,6 +93,24 @@ object GymIcons {
         }
     }
 
+    /**
+     * Back, in the top bar of a screen that was pushed onto another.
+     *
+     * A shaft as well as a head: [ChevronRight] on its own says "there is more this
+     * way", which is what a row uses it for, while a bar needs the one control that
+     * leaves the screen to be unmistakable at a glance. It is also the only way back
+     * on iOS, where nothing in the system offers one.
+     */
+    val ArrowLeft: ImageVector by lazy {
+        gymIcon("ArrowLeft") {
+            moveTo(20f, 12f)
+            lineTo(4f, 12f)
+            moveTo(10f, 6f)
+            lineTo(4f, 12f)
+            lineTo(10f, 18f)
+        }
+    }
+
     /** Delete. Revealed behind a row swiped to the left. */
     val Trash: ImageVector by lazy {
         gymIcon("Trash") {

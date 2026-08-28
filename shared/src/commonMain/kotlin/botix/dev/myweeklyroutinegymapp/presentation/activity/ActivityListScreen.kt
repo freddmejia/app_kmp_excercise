@@ -41,7 +41,6 @@ import myweeklyroutinegymapp.shared.generated.resources.activities_empty_in_cate
 import myweeklyroutinegymapp.shared.generated.resources.activities_not_trained_day
 import myweeklyroutinegymapp.shared.generated.resources.activities_nothing_trained_day
 import myweeklyroutinegymapp.shared.generated.resources.activities_nothing_trained_day_hint
-import myweeklyroutinegymapp.shared.generated.resources.activities_title
 import myweeklyroutinegymapp.shared.generated.resources.activities_trained_day
 import myweeklyroutinegymapp.shared.generated.resources.activities_uncategorised
 import myweeklyroutinegymapp.shared.generated.resources.activities_day_distance
@@ -98,7 +97,7 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
@@ -158,7 +157,7 @@ fun ActivityListContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenHeader(title = stringResource(Res.string.activities_title)) {
+        ScreenActions {
             TextButton(onClick = onManageCategories) {
                 Text(stringResource(Res.string.activities_categories))
             }

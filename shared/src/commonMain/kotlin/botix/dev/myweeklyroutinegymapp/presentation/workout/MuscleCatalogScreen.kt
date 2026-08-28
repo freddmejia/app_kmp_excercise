@@ -30,7 +30,6 @@ import myweeklyroutinegymapp.shared.generated.resources.common_archive
 import myweeklyroutinegymapp.shared.generated.resources.common_cancel
 import myweeklyroutinegymapp.shared.generated.resources.common_delete
 import myweeklyroutinegymapp.shared.generated.resources.common_deleted
-import myweeklyroutinegymapp.shared.generated.resources.common_done
 import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_ok
 import myweeklyroutinegymapp.shared.generated.resources.common_saved
@@ -42,7 +41,6 @@ import myweeklyroutinegymapp.shared.generated.resources.muscles_add_group
 import myweeklyroutinegymapp.shared.generated.resources.muscles_empty
 import myweeklyroutinegymapp.shared.generated.resources.muscles_empty_hint
 import myweeklyroutinegymapp.shared.generated.resources.muscles_no_leaves
-import myweeklyroutinegymapp.shared.generated.resources.muscles_title
 import myweeklyroutinegymapp.shared.generated.resources.plural_session_entries
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -50,12 +48,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun MuscleCatalogScreen(
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MuscleCatalogViewModel = koinViewModel(),
 ) {
@@ -63,7 +60,6 @@ fun MuscleCatalogScreen(
 
     MuscleCatalogContent(
         state = state,
-        onBack = onBack,
         onAddGroup = viewModel::addGroup,
         onAddMuscle = viewModel::addMuscle,
         onArchiveMuscle = viewModel::setMuscleArchived,
@@ -77,7 +73,6 @@ fun MuscleCatalogScreen(
 @Composable
 fun MuscleCatalogContent(
     state: MuscleCatalogUiState,
-    onBack: () -> Unit,
     onAddGroup: (String) -> Unit,
     onAddMuscle: (Long, String) -> Unit,
     onArchiveMuscle: (Long, Boolean) -> Unit,
@@ -98,9 +93,8 @@ fun MuscleCatalogContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenHeader(title = stringResource(Res.string.muscles_title)) {
+        ScreenActions {
             Button(onClick = { addGroupOpen = true }) { Text(stringResource(Res.string.muscles_add_group)) }
-            TextButton(onClick = onBack) { Text(stringResource(Res.string.common_done)) }
         }
 
         MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)

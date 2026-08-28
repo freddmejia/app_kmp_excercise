@@ -74,7 +74,6 @@ import myweeklyroutinegymapp.shared.generated.resources.log_scope_all
 import myweeklyroutinegymapp.shared.generated.resources.log_show_activity
 import myweeklyroutinegymapp.shared.generated.resources.log_show_all
 import myweeklyroutinegymapp.shared.generated.resources.log_summary
-import myweeklyroutinegymapp.shared.generated.resources.log_title
 import myweeklyroutinegymapp.shared.generated.resources.log_totals_warmup
 import myweeklyroutinegymapp.shared.generated.resources.log_untrained_header
 import myweeklyroutinegymapp.shared.generated.resources.log_warmup
@@ -93,7 +92,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
+import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
@@ -161,7 +160,7 @@ fun WorkoutLogContent(
         modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenHeader(title = stringResource(Res.string.log_title)) {
+        ScreenActions {
             TextButton(onClick = onManageMuscles) { Text(stringResource(Res.string.muscles_title)) }
             if (state.sessionId != null) {
                 TextButton(onClick = onCloseSession) { Text(stringResource(Res.string.common_close)) }

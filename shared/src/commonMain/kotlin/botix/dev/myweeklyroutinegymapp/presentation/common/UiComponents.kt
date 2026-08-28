@@ -76,39 +76,43 @@ fun EmptyState(
 }
 
 /**
- * A screen's pinned title and the actions that belong to it.
+ * The controls that belong to a screen, pinned under the app bar.
  *
- * [FlowRow] rather than a plain `Row`, because a `Row` measures its children in order and
- * gives each one only the width the previous ones left over. A title long enough to
- * fill the line therefore does not push the trailing buttons off the edge — it
- * measures them to zero, which removes them from the tree entirely: no pixels, and
- * nothing for accessibility or a tap to find. On the Log screen that deleted the one
- * control that creates a log, and the collapsed button then wrapped its own label a
- * letter per line, making the row tall enough to strand the title in mid-screen.
+ * The title used to live here too, on the same line. It is in the app bar now, which
+ * is what put the two platforms back in step: without one, iOS drew the screen's own
+ * headline against the bare safe-area inset while Android had a window background
+ * behind the status bar, so the same screen started at a different place and in a
+ * different colour on each. A bar that paints the inset is the only thing both
+ * platforms hand you for free.
  *
- * A width that holds in English is no evidence at all here: "Log workout" becomes
- * "Registrar entrenamiento", and "New log" becomes "Nuevo registro". So the actions
- * drop to a second line when they do not fit rather than competing for the first,
- * and stay beside the title when they do.
+ * What stays here is the actions, and the reason they are not in the bar's `actions`
+ * slot either: that slot is a plain `Row`, and these are text buttons whose labels are
+ * translated. A `Row` measures its children in order and gives each one only the width
+ * the previous ones left over, so a long label does not push the trailing button off
+ * the edge — it measures it to zero, which removes it from the tree entirely: no
+ * pixels, and nothing for accessibility or a tap to find. On the Log screen that
+ * deleted the one control that creates a log, and the collapsed button then wrapped
+ * its own label a letter per line.
+ *
+ * A width that holds in English is no evidence at all here: "New log" becomes "Nuevo
+ * registro". So this is a [FlowRow]: the actions drop to a second line when they do
+ * not fit, rather than competing for the first.
+ *
+ * Trailing-aligned, because that is the edge the reading eye ends at and where the
+ * primary action of every one of these screens already sat.
  */
 @Composable
-fun ScreenHeader(
-    title: String,
+fun ScreenActions(
     modifier: Modifier = Modifier,
-    actions: @Composable () -> Unit = {},
+    actions: @Composable () -> Unit,
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        // One line: title left, actions right, exactly as before. Two: each line
-        // holds a single item, which SpaceBetween leaves at the start.
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = title, style = MaterialTheme.typography.headlineSmall)
-        // Also a FlowRow: the actions alone can outgrow the line once translated,
-        // and inside a Row the last of them would vanish the same way.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
+        actions()
     }
 }
 

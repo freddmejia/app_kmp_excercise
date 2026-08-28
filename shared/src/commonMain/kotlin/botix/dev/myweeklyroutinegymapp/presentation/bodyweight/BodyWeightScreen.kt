@@ -51,7 +51,6 @@ import myweeklyroutinegymapp.shared.generated.resources.weight_preset_days
 import myweeklyroutinegymapp.shared.generated.resources.weight_rate
 import myweeklyroutinegymapp.shared.generated.resources.weight_replace
 import myweeklyroutinegymapp.shared.generated.resources.weight_samples
-import myweeklyroutinegymapp.shared.generated.resources.weight_title
 import myweeklyroutinegymapp.shared.generated.resources.weight_trend_falling
 import myweeklyroutinegymapp.shared.generated.resources.weight_trend_insufficient
 import myweeklyroutinegymapp.shared.generated.resources.weight_trend_rising
@@ -67,7 +66,6 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.BodyWeightRange
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
@@ -126,11 +124,10 @@ fun BodyWeightContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Pinned header: the title and the two filters. They say what you are looking
-        // at and control it, so scrolling them away would leave the content below
-        // unattributed — the strip in particular is what the readings belong to.
-        ScreenHeader(title = stringResource(Res.string.weight_title))
-
+        // Pinned, like the app bar above them: the strip and the presets say what
+        // you are looking at *and* control it, so scrolling them away would leave the
+        // readings below unattributed. This screen has no actions of its own, so the
+        // title in the bar is the whole of its header.
         // The strip picks the day a reading belongs to. The presets are the chart's
         // own range: a week is the unit you *log* in, months are the unit you read a
         // trend in, and collapsing the two would cost the trend its point.
