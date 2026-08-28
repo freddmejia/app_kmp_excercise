@@ -1,5 +1,6 @@
 package botix.dev.myweeklyroutinegymapp.presentation.workout
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
@@ -31,8 +34,9 @@ import myweeklyroutinegymapp.shared.generated.resources.common_cancel
 import myweeklyroutinegymapp.shared.generated.resources.common_delete
 import myweeklyroutinegymapp.shared.generated.resources.common_deleted
 import myweeklyroutinegymapp.shared.generated.resources.common_name
-import myweeklyroutinegymapp.shared.generated.resources.common_ok
 import myweeklyroutinegymapp.shared.generated.resources.common_saved
+import myweeklyroutinegymapp.shared.generated.resources.muscle_edit
+import myweeklyroutinegymapp.shared.generated.resources.muscle_edit_group
 import myweeklyroutinegymapp.shared.generated.resources.muscle_msg_delete_blocked
 import myweeklyroutinegymapp.shared.generated.resources.muscle_msg_name_blank
 import myweeklyroutinegymapp.shared.generated.resources.muscle_new
@@ -49,10 +53,13 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
+import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorViewModel.Companion.NEW
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun MuscleCatalogScreen(
+    onEditGroup: (groupId: Long) -> Unit,
+    onEditMuscle: (groupId: Long, muscleId: Long) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MuscleCatalogViewModel = koinViewModel(),
 ) {
@@ -60,8 +67,8 @@ fun MuscleCatalogScreen(
 
     MuscleCatalogContent(
         state = state,
-        onAddGroup = viewModel::addGroup,
-        onAddMuscle = viewModel::addMuscle,
+        onEditGroup = onEditGroup,
+        onEditMuscle = onEditMuscle,
         onArchiveMuscle = viewModel::setMuscleArchived,
         onDeleteMuscle = viewModel::removeMuscle,
         onDeleteGroup = viewModel::removeGroup,
@@ -73,17 +80,16 @@ fun MuscleCatalogScreen(
 @Composable
 fun MuscleCatalogContent(
     state: MuscleCatalogUiState,
-    onAddGroup: (String) -> Unit,
-    onAddMuscle: (Long, String) -> Unit,
+    /** Zero opens an empty form: there is no group yet to name. */
+    onEditGroup: (groupId: Long) -> Unit,
+    /** A muscle id of zero adds a new leaf to the group instead of renaming one. */
+    onEditMuscle: (groupId: Long, muscleId: Long) -> Unit,
     onArchiveMuscle: (Long, Boolean) -> Unit,
     onDeleteMuscle: (Long) -> Unit,
     onDeleteGroup: (Long) -> Unit,
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var addGroupOpen by remember { mutableStateOf(false) }
-    var addMuscleToGroup by remember { mutableStateOf<Long?>(null) }
-
     if (state.isLoading) {
         LoadingState(modifier)
         return
@@ -94,7 +100,9 @@ fun MuscleCatalogContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ScreenActions {
-            Button(onClick = { addGroupOpen = true }) { Text(stringResource(Res.string.muscles_add_group)) }
+            Button(onClick = { onEditGroup(NEW) }) {
+                Text(stringResource(Res.string.muscles_add_group))
+            }
         }
 
         MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
@@ -123,13 +131,26 @@ fun MuscleCatalogContent(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // The name is the button, the way a row is elsewhere:
+                            // tapping it renames the group. It is a bare Text rather
+                            // than a card of its own — this one already sits inside a
+                            // card that holds the group's leaves — so it needs the
+                            // click label a card would have carried for it.
                             Text(
                                 group.name,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable(
+                                        onClickLabel = stringResource(Res.string.muscle_edit_group),
+                                        role = Role.Button,
+                                        onClick = { onEditGroup(group.id) },
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
                             )
                             Row {
-                                TextButton(onClick = { addMuscleToGroup = group.id }) {
+                                TextButton(onClick = { onEditMuscle(group.id, NEW) }) {
                                     Text(stringResource(Res.string.common_add))
                                 }
                                 TextButton(onClick = { onDeleteGroup(group.id) }) {
@@ -154,7 +175,18 @@ fun MuscleCatalogContent(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(muscle.name, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    muscle.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier
+                                        .clip(MaterialTheme.shapes.small)
+                                        .clickable(
+                                            onClickLabel = stringResource(Res.string.muscle_edit),
+                                            role = Role.Button,
+                                            onClick = { onEditMuscle(group.id, muscle.id) },
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                                )
                                 Row {
                                     TextButton(onClick = { onArchiveMuscle(muscle.id, true) }) {
                                         Text(stringResource(Res.string.common_archive))
@@ -170,55 +202,6 @@ fun MuscleCatalogContent(
             }
         }
     }
-
-    if (addGroupOpen) {
-        NameDialog(
-            title = stringResource(Res.string.muscle_new_group),
-            onDismiss = { addGroupOpen = false },
-            onConfirm = {
-                onAddGroup(it)
-                addGroupOpen = false
-            },
-        )
-    }
-
-    addMuscleToGroup?.let { groupId ->
-        NameDialog(
-            title = stringResource(Res.string.muscle_new),
-            onDismiss = { addMuscleToGroup = null },
-            onConfirm = {
-                onAddMuscle(groupId, it)
-                addMuscleToGroup = null
-            },
-        )
-    }
-}
-
-@Composable
-private fun NameDialog(
-    title: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(Res.string.common_name)) },
-                singleLine = true,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(name) }) { Text(stringResource(Res.string.common_add)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
-        },
-    )
 }
 
 /** The message's wording. Rendering is [MessageSnackbar]'s job. */

@@ -7,28 +7,18 @@ import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategory
 import botix.dev.myweeklyroutinegymapp.domain.Clock
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.CategorySelection
-import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.model.DeleteOutcome
-import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
-import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementTypeChange
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveActivityUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.AssignActivityCategoryUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ChangeMeasurementTypeUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivitiesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoriesUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.SaveActivityResult
 import botix.dev.myweeklyroutinegymapp.presentation.common.WEEK
 import botix.dev.myweeklyroutinegymapp.presentation.common.weekOf
 import botix.dev.myweeklyroutinegymapp.presentation.common.weekStartOf
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.UpdateActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityMuscleLinksUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityVolumeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveSessionDaysUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveMusclePickerUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetActivityMusclesUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,17 +34,18 @@ import kotlinx.coroutines.launch
  * Carries the counts the domain returned rather than a formatted string, so the
  * wording — and its translation — stays in the UI layer.
  */
+/**
+ * What this screen has to announce.
+ *
+ * Two members, because this screen no longer writes an activity — creating and editing
+ * moved to [ActivityEditorViewModel], and the reasons a *form* is refused are reported
+ * there, under the field that caused them, as [ActivityEditorError].
+ */
 sealed interface ActivityMessage {
-    data object NameBlank : ActivityMessage
-    data object NameTaken : ActivityMessage
-    data object Saved : ActivityMessage
     data object Deleted : ActivityMessage
 
     /** Offer archiving instead; deletion would break [sessionCount] sessions. */
     data class DeleteBlocked(val sessionCount: Long) : ActivityMessage
-
-    /** The type is fixed now that sessions exist under it. */
-    data class MeasurementTypeLocked(val sessionCount: Long) : ActivityMessage
 }
 
 data class ActivityListUiState(
@@ -68,7 +59,6 @@ data class ActivityListUiState(
      * than fetched when a dialog opens: the creation form needs it before any
      * activity exists, so there is no row to hang a lazy subscription off.
      */
-    val muscleSections: List<MuscleSection> = emptyList(),
     /** Linked muscle ids per activity; absent means none, which reads as "no opinion". */
     val musclesByActivity: Map<Long, Set<Long>> = emptyMap(),
     val selectedDay: Long = 0,
@@ -122,16 +112,10 @@ private data class DayState(
 @OptIn(ExperimentalCoroutinesApi::class)
 class ActivityListViewModel(
     private val observeActivities: ObserveActivitiesUseCase,
-    private val createActivity: CreateActivityUseCase,
-    private val updateActivity: UpdateActivityUseCase,
     private val archiveActivity: ArchiveActivityUseCase,
     private val deleteActivity: DeleteActivityUseCase,
-    private val changeMeasurementType: ChangeMeasurementTypeUseCase,
     private val observeCategories: ObserveCategoriesUseCase,
-    private val assignCategory: AssignActivityCategoryUseCase,
-    private val observeMusclePicker: ObserveMusclePickerUseCase,
     private val observeMuscleLinks: ObserveActivityMuscleLinksUseCase,
-    private val setActivityMuscles: SetActivityMusclesUseCase,
     private val observeActivityVolume: ObserveActivityVolumeUseCase,
     private val observeSessionDays: ObserveSessionDaysUseCase,
     clock: Clock,
@@ -187,11 +171,9 @@ class ActivityListViewModel(
             isLoading = false,
             message = currentMessage,
         )
-    }.combine(observeMusclePicker()) { partial, sections ->
-        // combine() tops out at five flows, so the muscle data folds in as two
-        // further steps rather than forcing the rest into a nested shape.
-        partial.copy(muscleSections = sections)
     }.combine(observeMuscleLinks()) { partial, links ->
+        // combine() tops out at five flows, so the links fold in as a further step
+        // rather than forcing the rest into a nested shape.
         partial.copy(musclesByActivity = links)
     }.combine(dayState) { partial, day ->
         // The split happens in the state's own getters rather than here: the activity
@@ -210,11 +192,6 @@ class ActivityListViewModel(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = ActivityListUiState(selectedDay = today, today = today),
     )
-
-    /** An empty set is meaningful: it clears the link and restores "no opinion". */
-    fun setMuscles(activityId: Long, muscleIds: Set<Long>) {
-        viewModelScope.launch { setActivityMuscles(activityId, muscleIds) }
-    }
 
     fun setFilter(value: ActivityFilter) {
         filter.value = value
@@ -242,43 +219,6 @@ class ActivityListViewModel(
         message.value = null
     }
 
-    fun create(
-        name: String,
-        measurementType: MeasurementType,
-        icon: String? = null,
-        color: String? = null,
-        categoryId: Long? = null,
-        muscleIds: Set<Long> = emptySet(),
-    ) {
-        viewModelScope.launch {
-            message.value =
-                createActivity(name, measurementType, icon, color, categoryId, muscleIds).toMessage()
-        }
-    }
-
-    fun rename(
-        id: Long,
-        name: String,
-        icon: String? = null,
-        color: String? = null,
-        categoryId: Long? = null,
-    ) {
-        viewModelScope.launch {
-            message.value = updateActivity(id, name, icon, color, categoryId).toMessage()
-        }
-    }
-
-    /**
-     * Moves an activity between categories from the list row; null uncategorises it.
-     *
-     * Distinct from [rename] because the row has no name field in hand — routing this
-     * through the rename use case would make a re-validation of the name a condition
-     * of changing its label.
-     */
-    fun setCategory(id: Long, categoryId: Long?) {
-        viewModelScope.launch { assignCategory(id, categoryId) }
-    }
-
     fun setArchived(id: Long, archived: Boolean) {
         viewModelScope.launch { archiveActivity(id, archived) }
     }
@@ -296,19 +236,5 @@ class ActivityListViewModel(
         }
     }
 
-    fun changeType(id: Long, measurementType: MeasurementType) {
-        viewModelScope.launch {
-            message.value = when (val outcome = changeMeasurementType(id, measurementType)) {
-                is MeasurementTypeChange.Changed -> ActivityMessage.Saved
-                is MeasurementTypeChange.BlockedByHistory ->
-                    ActivityMessage.MeasurementTypeLocked(outcome.sessionCount)
-            }
-        }
-    }
 
-    private fun SaveActivityResult.toMessage(): ActivityMessage = when (this) {
-        is SaveActivityResult.Saved -> ActivityMessage.Saved
-        SaveActivityResult.BlankName -> ActivityMessage.NameBlank
-        SaveActivityResult.NameTaken -> ActivityMessage.NameTaken
-    }
 }

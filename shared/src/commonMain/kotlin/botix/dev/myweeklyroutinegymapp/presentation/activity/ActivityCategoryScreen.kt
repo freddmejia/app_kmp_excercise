@@ -46,7 +46,6 @@ import myweeklyroutinegymapp.shared.generated.resources.common_deleted
 import myweeklyroutinegymapp.shared.generated.resources.common_icon_optional
 import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_new
-import myweeklyroutinegymapp.shared.generated.resources.common_ok
 import myweeklyroutinegymapp.shared.generated.resources.common_save
 import myweeklyroutinegymapp.shared.generated.resources.common_saved
 import myweeklyroutinegymapp.shared.generated.resources.plural_activities
@@ -57,6 +56,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategoryUsage
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
+import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorViewModel.Companion.NEW
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
@@ -64,6 +64,7 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun ActivityCategoryScreen(
+    onEdit: (categoryId: Long) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ActivityCategoryViewModel = koinViewModel(),
 ) {
@@ -71,8 +72,7 @@ fun ActivityCategoryScreen(
 
     ActivityCategoryContent(
         state = state,
-        onCreate = { name, icon -> viewModel.create(name, icon) },
-        onRename = { id, name, icon -> viewModel.rename(id, name, icon) },
+        onEdit = onEdit,
         onArchive = { id -> viewModel.setArchived(id, true) },
         onDelete = viewModel::delete,
         onConsumeMessage = viewModel::consumeMessage,
@@ -87,15 +87,13 @@ fun ActivityCategoryScreen(
 @Composable
 fun ActivityCategoryContent(
     state: ActivityCategoryUiState,
-    onCreate: (String, String?) -> Unit,
-    onRename: (Long, String, String?) -> Unit,
+    /** Zero opens an empty form: there is no category yet to name. */
+    onEdit: (categoryId: Long) -> Unit,
     onArchive: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var createOpen by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<ActivityCategoryUsage?>(null) }
     var confirmingDelete by remember { mutableStateOf<ActivityCategoryUsage?>(null) }
 
     if (state.isLoading) {
@@ -108,7 +106,7 @@ fun ActivityCategoryContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ScreenActions {
-            Button(onClick = { createOpen = true }) { Text(stringResource(Res.string.common_new)) }
+            Button(onClick = { onEdit(NEW) }) { Text(stringResource(Res.string.common_new)) }
         }
 
         MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
@@ -128,38 +126,12 @@ fun ActivityCategoryContent(
             items(state.categories, key = { it.category.id }) { usage ->
                 CategoryRow(
                     usage = usage,
-                    onEdit = { editing = usage },
+                    onEdit = { onEdit(usage.category.id) },
                     onArchive = { onArchive(usage.category.id) },
                     onDelete = { confirmingDelete = usage },
                 )
             }
         }
-    }
-
-    if (createOpen) {
-        CategoryFormDialog(
-            title = stringResource(Res.string.category_new_title),
-            initialName = "",
-            initialIcon = "",
-            onDismiss = { createOpen = false },
-            onConfirm = { name, icon ->
-                onCreate(name, icon)
-                createOpen = false
-            },
-        )
-    }
-
-    editing?.let { usage ->
-        CategoryFormDialog(
-            title = stringResource(Res.string.category_edit_title),
-            initialName = usage.category.name,
-            initialIcon = usage.category.icon.orEmpty(),
-            onDismiss = { editing = null },
-            onConfirm = { name, icon ->
-                onRename(usage.category.id, name, icon)
-                editing = null
-            },
-        )
     }
 
     confirmingDelete?.let { usage ->
@@ -267,49 +239,6 @@ private fun CategoryRow(
             }
         }
     }
-}
-
-@Composable
-private fun CategoryFormDialog(
-    title: String,
-    initialName: String,
-    initialIcon: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String?) -> Unit,
-) {
-    var name by remember { mutableStateOf(initialName) }
-    var icon by remember { mutableStateOf(initialIcon) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(Res.string.common_name)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = icon,
-                    onValueChange = { icon = it },
-                    label = { Text(stringResource(Res.string.common_icon_optional)) },
-                    singleLine = true,
-                )
-            }
-        },
-        confirmButton = {
-            // Blank name is not blocked here: the use case owns that rule, and the
-            // banner reports it. Duplicating the check would let the two disagree.
-            TextButton(onClick = { onConfirm(name, icon.takeIf { it.isNotBlank() }) }) {
-                Text(stringResource(Res.string.common_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
-        },
-    )
 }
 
 /** The message's wording. Rendering is [MessageSnackbar]'s job. */

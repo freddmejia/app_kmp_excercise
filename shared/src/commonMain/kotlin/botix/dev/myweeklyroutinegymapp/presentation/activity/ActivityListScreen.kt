@@ -6,35 +6,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.activities_archived_badge
-import myweeklyroutinegymapp.shared.generated.resources.activities_categories
 import myweeklyroutinegymapp.shared.generated.resources.activities_empty
 import myweeklyroutinegymapp.shared.generated.resources.activities_empty_hint
 import myweeklyroutinegymapp.shared.generated.resources.activities_empty_in_category
@@ -45,42 +34,20 @@ import myweeklyroutinegymapp.shared.generated.resources.activities_trained_day
 import myweeklyroutinegymapp.shared.generated.resources.activities_uncategorised
 import myweeklyroutinegymapp.shared.generated.resources.activities_day_distance
 import myweeklyroutinegymapp.shared.generated.resources.activities_day_volume
-import myweeklyroutinegymapp.shared.generated.resources.activity_category_for
-import myweeklyroutinegymapp.shared.generated.resources.activity_category_label
 import myweeklyroutinegymapp.shared.generated.resources.activity_filter_active
 import myweeklyroutinegymapp.shared.generated.resources.activity_filter_all
 import myweeklyroutinegymapp.shared.generated.resources.activity_filter_archived
-import myweeklyroutinegymapp.shared.generated.resources.activity_measure_question
 import myweeklyroutinegymapp.shared.generated.resources.activity_msg_delete_blocked
 import myweeklyroutinegymapp.shared.generated.resources.activity_msg_name_blank
 import myweeklyroutinegymapp.shared.generated.resources.activity_msg_name_taken
 import myweeklyroutinegymapp.shared.generated.resources.activity_msg_type_locked
-import myweeklyroutinegymapp.shared.generated.resources.activity_muscles_dialog_hint
-import myweeklyroutinegymapp.shared.generated.resources.activity_muscles_for
-import myweeklyroutinegymapp.shared.generated.resources.activity_muscles_hint
-import myweeklyroutinegymapp.shared.generated.resources.activity_muscles_label
-import myweeklyroutinegymapp.shared.generated.resources.activity_muscles_optional
-import myweeklyroutinegymapp.shared.generated.resources.activity_new_title
-import myweeklyroutinegymapp.shared.generated.resources.activity_no_categories_hint
-import myweeklyroutinegymapp.shared.generated.resources.activity_no_muscles_hint
 import myweeklyroutinegymapp.shared.generated.resources.common_all
 import myweeklyroutinegymapp.shared.generated.resources.common_archive
-import myweeklyroutinegymapp.shared.generated.resources.common_cancel
-import myweeklyroutinegymapp.shared.generated.resources.common_close
-import myweeklyroutinegymapp.shared.generated.resources.common_create
 import myweeklyroutinegymapp.shared.generated.resources.common_delete
 import myweeklyroutinegymapp.shared.generated.resources.common_deleted
-import myweeklyroutinegymapp.shared.generated.resources.common_icon_optional
-import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_new
-import myweeklyroutinegymapp.shared.generated.resources.common_none
-import myweeklyroutinegymapp.shared.generated.resources.common_ok
-import myweeklyroutinegymapp.shared.generated.resources.common_save
 import myweeklyroutinegymapp.shared.generated.resources.common_saved
 import myweeklyroutinegymapp.shared.generated.resources.common_unarchive
-import myweeklyroutinegymapp.shared.generated.resources.measure_distance
-import myweeklyroutinegymapp.shared.generated.resources.measure_simple
-import myweeklyroutinegymapp.shared.generated.resources.measure_strength
 import myweeklyroutinegymapp.shared.generated.resources.plural_muscles
 import myweeklyroutinegymapp.shared.generated.resources.plural_sessions
 import org.jetbrains.compose.resources.StringResource
@@ -92,15 +59,14 @@ import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategory
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.CategorySelection
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
-import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ActivityFilter
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorViewModel.Companion.NEW
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
-import botix.dev.myweeklyroutinegymapp.presentation.common.format1
 import botix.dev.myweeklyroutinegymapp.presentation.common.formatMeasure
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
@@ -108,7 +74,7 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun ActivityListScreen(
-    onManageCategories: () -> Unit,
+    onEdit: (activityId: Long) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ActivityListViewModel = koinViewModel(),
 ) {
@@ -118,15 +84,12 @@ fun ActivityListScreen(
         state = state,
         onSelectFilter = viewModel::setFilter,
         onSelectCategory = viewModel::setCategorySelection,
-        onCreate = viewModel::create,
-        onSetActivityCategory = viewModel::setCategory,
-        onSetActivityMuscles = viewModel::setMuscles,
+        onEdit = onEdit,
         onSelectDay = viewModel::selectDay,
         onStepWeek = viewModel::stepWeek,
         onGoToToday = viewModel::goToToday,
         onSetArchived = viewModel::setArchived,
         onDelete = viewModel::delete,
-        onManageCategories = onManageCategories,
         onConsumeMessage = viewModel::consumeMessage,
         modifier = modifier,
     )
@@ -137,31 +100,25 @@ fun ActivityListContent(
     state: ActivityListUiState,
     onSelectFilter: (ActivityFilter) -> Unit,
     onSelectCategory: (CategorySelection) -> Unit,
-    onCreate: (String, MeasurementType, String?, String?, Long?, Set<Long>) -> Unit,
-    onSetActivityCategory: (Long, Long?) -> Unit,
-    onSetActivityMuscles: (Long, Set<Long>) -> Unit,
+    /** Zero opens an empty form: there is no activity yet to name. */
+    onEdit: (activityId: Long) -> Unit,
     onSelectDay: (Long) -> Unit,
     onStepWeek: (Boolean) -> Unit,
     onGoToToday: () -> Unit,
     onSetArchived: (Long, Boolean) -> Unit,
     onDelete: (Long) -> Unit,
-    onManageCategories: () -> Unit,
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var recategorising by remember { mutableStateOf<Activity?>(null) }
-    var editingMuscles by remember { mutableStateOf<Activity?>(null) }
-
     Column(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ScreenActions {
-            TextButton(onClick = onManageCategories) {
-                Text(stringResource(Res.string.activities_categories))
-            }
-            Button(onClick = { showCreateDialog = true }) { Text(stringResource(Res.string.common_new)) }
+            // Categories moved to Settings with the muscle catalogue: this screen
+            // *uses* categories to filter, and the row below is where that happens;
+            // editing the list of them is a different job in a different place.
+            Button(onClick = { onEdit(NEW) }) { Text(stringResource(Res.string.common_new)) }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -256,8 +213,7 @@ fun ActivityListContent(
                         categoryName = activity.categoryId?.let { state.categoryNamesById[it] },
                         muscleCount = state.musclesByActivity[activity.id]?.size ?: 0,
                         dayVolume = state.dayVolume[activity.id],
-                        onChangeCategory = { recategorising = activity },
-                        onChangeMuscles = { editingMuscles = activity },
+                        onEdit = { onEdit(activity.id) },
                         onSetArchived = onSetArchived,
                         onDelete = onDelete,
                     )
@@ -277,8 +233,7 @@ fun ActivityListContent(
                         categoryName = activity.categoryId?.let { state.categoryNamesById[it] },
                         muscleCount = state.musclesByActivity[activity.id]?.size ?: 0,
                         dayVolume = null,
-                        onChangeCategory = { recategorising = activity },
-                        onChangeMuscles = { editingMuscles = activity },
+                        onEdit = { onEdit(activity.id) },
                         onSetArchived = onSetArchived,
                         onDelete = onDelete,
                     )
@@ -287,43 +242,6 @@ fun ActivityListContent(
         }
     }
 
-    if (showCreateDialog) {
-        CreateActivityDialog(
-            categories = state.categories,
-            muscleSections = state.muscleSections,
-            onDismiss = { showCreateDialog = false },
-            onConfirm = { name, type, icon, categoryId, muscleIds ->
-                onCreate(name, type, icon, null, categoryId, muscleIds)
-                showCreateDialog = false
-            },
-        )
-    }
-
-    editingMuscles?.let { activity ->
-        EditMusclesDialog(
-            activityName = activity.name,
-            sections = state.muscleSections,
-            initialSelection = state.musclesByActivity[activity.id].orEmpty(),
-            onDismiss = { editingMuscles = null },
-            onConfirm = { ids ->
-                onSetActivityMuscles(activity.id, ids)
-                editingMuscles = null
-            },
-        )
-    }
-
-    recategorising?.let { activity ->
-        PickCategoryDialog(
-            activityName = activity.name,
-            categories = state.categories,
-            selectedId = activity.categoryId,
-            onDismiss = { recategorising = null },
-            onPick = { categoryId ->
-                onSetActivityCategory(activity.id, categoryId)
-                recategorising = null
-            },
-        )
-    }
 }
 
 /**
@@ -369,8 +287,7 @@ private fun ActivityRow(
     categoryName: String?,
     muscleCount: Int,
     dayVolume: ActivityVolume?,
-    onChangeCategory: () -> Unit,
-    onChangeMuscles: () -> Unit,
+    onEdit: () -> Unit,
     onSetArchived: (Long, Boolean) -> Unit,
     onDelete: (Long) -> Unit,
 ) {
@@ -385,7 +302,11 @@ private fun ActivityRow(
         label = stringResource(Res.string.common_delete),
         onDelete = { onDelete(activity.id) },
     ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
+        // The card is the button, as everywhere else: tapping it opens the form
+        // that holds the name, the icon, the category, the type and the muscles.
+        // Category and Muscles used to be two buttons on this row opening two
+        // dialogs, each showing one of those fields with the rest out of sight.
+        Card(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -467,15 +388,11 @@ private fun ActivityRow(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+                // Archive keeps its button. It is the third thing you can do to an
+                // activity and there is no third gesture to give it; hiding it behind
+                // one would make it undiscoverable to keep a symmetry nothing asked
+                // for.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onChangeCategory) {
-                        Text(stringResource(Res.string.activity_category_label))
-                    }
-                    if (supportsMuscles) {
-                        TextButton(onClick = onChangeMuscles) {
-                            Text(stringResource(Res.string.activity_muscles_label))
-                        }
-                    }
                     TextButton(onClick = { onSetArchived(activity.id, !activity.isArchived) }) {
                         Text(
                             stringResource(
@@ -493,168 +410,9 @@ private fun ActivityRow(
     }
 }
 
-@Composable
-private fun CreateActivityDialog(
-    categories: List<ActivityCategory>,
-    muscleSections: List<MuscleSection>,
-    onDismiss: () -> Unit,
-    onConfirm: (String, MeasurementType, String?, Long?, Set<Long>) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    var icon by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(MeasurementType.STRENGTH) }
-    var categoryId by remember { mutableStateOf<Long?>(null) }
-    var muscleIds by remember { mutableStateOf(emptySet<Long>()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.activity_new_title)) },
-        text = {
-            // The form outgrew a fixed dialog once muscles joined it, so it scrolls
-            // and is capped — otherwise the buttons get pushed off-screen on a phone.
-            Column(
-                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(Res.string.common_name)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = icon,
-                    onValueChange = { icon = it },
-                    label = { Text(stringResource(Res.string.common_icon_optional)) },
-                    singleLine = true,
-                )
-
-                if (categories.isNotEmpty()) {
-                    Text(stringResource(Res.string.activity_category_label), style = MaterialTheme.typography.labelLarge)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item {
-                            FilterChip(
-                                selected = categoryId == null,
-                                onClick = { categoryId = null },
-                                label = { Text(stringResource(Res.string.common_none)) },
-                            )
-                        }
-                        items(categories, key = { it.id }) { category ->
-                            FilterChip(
-                                selected = categoryId == category.id,
-                                onClick = { categoryId = category.id },
-                                label = {
-                                    Text(listOfNotNull(category.icon, category.name).joinToString(" "))
-                                },
-                            )
-                        }
-                    }
-                }
-
-                Text(stringResource(Res.string.activity_measure_question), style = MaterialTheme.typography.labelLarge)
-                // Chosen once, at creation: the type becomes immutable as soon as the
-                // activity has a session, so this is the moment that matters. Unlike
-                // the category above, this list is fixed — each value is a logging
-                // form and a set of metrics that exist in code.
-                MeasurementType.entries.forEach { option ->
-                    FilterChip(
-                        selected = option == type,
-                        onClick = { type = option },
-                        label = { Text(option.label()) },
-                    )
-                }
-
-                // Only for STRENGTH: the link exists to scope the strength log
-                // picker, and no other type opens it. Switching type keeps whatever
-                // was ticked rather than clearing it, so flipping back and forth by
-                // accident does not silently undo the selection.
-                if (type == MeasurementType.STRENGTH) {
-                    Text(stringResource(Res.string.activity_muscles_optional), style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        stringResource(Res.string.activity_muscles_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    MuscleChecklist(
-                        sections = muscleSections,
-                        selected = muscleIds,
-                        onToggle = { id ->
-                            muscleIds = if (id in muscleIds) muscleIds - id else muscleIds + id
-                        },
-                        onToggleGroup = { ids, selectAll ->
-                            muscleIds = if (selectAll) muscleIds + ids else muscleIds - ids
-                        },
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(
-                        name,
-                        type,
-                        icon.takeIf { it.isNotBlank() },
-                        categoryId,
-                        // Dropped for non-strength types, so a selection made and then
-                        // switched away from cannot be saved invisibly.
-                        if (type == MeasurementType.STRENGTH) muscleIds else emptySet(),
-                    )
-                },
-            ) { Text(stringResource(Res.string.common_create)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
-        },
-    )
-}
-
-@Composable
-private fun PickCategoryDialog(
-    activityName: String,
-    categories: List<ActivityCategory>,
-    selectedId: Long?,
-    onDismiss: () -> Unit,
-    onPick: (Long?) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.activity_category_for, activityName)) },
-        text = {
-            if (categories.isEmpty()) {
-                Text(stringResource(Res.string.activity_no_categories_hint))
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = selectedId == null,
-                        onClick = { onPick(null) },
-                        label = { Text(stringResource(Res.string.activities_uncategorised)) },
-                    )
-                    categories.forEach { category ->
-                        FilterChip(
-                            selected = selectedId == category.id,
-                            onClick = { onPick(category.id) },
-                            label = {
-                                Text(listOfNotNull(category.icon, category.name).joinToString(" "))
-                            },
-                        )
-                    }
-                }
-            }
-        },
-        // Picking applies immediately and closes, so there is nothing left to confirm.
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_close)) }
-        },
-    )
-}
-
 /** The message's wording. Rendering is [MessageSnackbar]'s job. */
 @Composable
 private fun messageText(message: ActivityMessage): String = when (message) {
-    ActivityMessage.NameBlank -> stringResource(Res.string.activity_msg_name_blank)
-    ActivityMessage.NameTaken -> stringResource(Res.string.activity_msg_name_taken)
-    ActivityMessage.Saved -> stringResource(Res.string.common_saved)
     ActivityMessage.Deleted -> stringResource(Res.string.common_deleted)
     is ActivityMessage.DeleteBlocked -> stringResource(
         Res.string.activity_msg_delete_blocked,
@@ -664,21 +422,6 @@ private fun messageText(message: ActivityMessage): String = when (message) {
             message.sessionCount.toString(),
         ),
     )
-
-    is ActivityMessage.MeasurementTypeLocked -> stringResource(
-        Res.string.activity_msg_type_locked,
-        pluralStringResource(
-            Res.plurals.plural_sessions,
-            message.sessionCount.toInt(),
-            message.sessionCount.toString(),
-        ),
-    )
-}
-
-private fun MeasurementType.labelRes(): StringResource = when (this) {
-    MeasurementType.STRENGTH -> Res.string.measure_strength
-    MeasurementType.DISTANCE_TIME -> Res.string.measure_distance
-    MeasurementType.SIMPLE -> Res.string.measure_simple
 }
 
 @Composable
@@ -692,114 +435,4 @@ private fun ActivityFilter.label(): StringResource = when (this) {
     ActivityFilter.ACTIVE -> Res.string.activity_filter_active
     ActivityFilter.ARCHIVED -> Res.string.activity_filter_archived
     ActivityFilter.ALL -> Res.string.activity_filter_all
-}
-
-/**
- * The muscle picker, shared by the creation form and per-activity editing.
- *
- * Grouped exactly like the log screen's own picker and fed from the same sections, so
- * what you tick here reads the same way as the screen where it takes effect.
- */
-@Composable
-private fun MuscleChecklist(
-    sections: List<MuscleSection>,
-    selected: Set<Long>,
-    onToggle: (Long) -> Unit,
-    onToggleGroup: (Set<Long>, Boolean) -> Unit,
-) {
-    if (sections.isEmpty()) {
-        Text(
-            stringResource(Res.string.activity_no_muscles_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        return
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        sections.forEach { section ->
-            val ids = section.muscles.map { it.muscleId }.toSet()
-            val allSelected = ids.isNotEmpty() && selected.containsAll(ids)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    section.groupName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                // Ticking a group is a shortcut for ticking its leaves, not a link to
-                // the group itself: sessions reference leaves, so the stored set must
-                // too (TRAINING.md §3).
-                TextButton(onClick = { onToggleGroup(ids, !allSelected) }) {
-                    Text(
-                        stringResource(
-                            if (allSelected) Res.string.common_none else Res.string.common_all,
-                        ),
-                    )
-                }
-            }
-            section.muscles.forEach { muscle ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { onToggle(muscle.muscleId) },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = muscle.muscleId in selected,
-                        onCheckedChange = { onToggle(muscle.muscleId) },
-                    )
-                    Text(muscle.muscleName, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EditMusclesDialog(
-    activityName: String,
-    sections: List<MuscleSection>,
-    initialSelection: Set<Long>,
-    onDismiss: () -> Unit,
-    onConfirm: (Set<Long>) -> Unit,
-) {
-    // Seeded from the stored set and edited locally, so Cancel really cancels. Keyed
-    // on the activity so reopening for a different row does not reuse the previous
-    // row's ticks.
-    var selected by remember(activityName, initialSelection) { mutableStateOf(initialSelection) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.activity_muscles_for, activityName)) },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    stringResource(Res.string.activity_muscles_dialog_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                MuscleChecklist(
-                    sections = sections,
-                    selected = selected,
-                    onToggle = { id -> selected = if (id in selected) selected - id else selected + id },
-                    onToggleGroup = { ids, selectAll ->
-                        selected = if (selectAll) selected + ids else selected - ids
-                    },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selected) }) {
-                Text(stringResource(Res.string.common_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
-        },
-    )
 }

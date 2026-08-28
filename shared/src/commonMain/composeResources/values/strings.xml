@@ -11,19 +11,14 @@
 <resources>
 
     <!-- ================= common ================= -->
-    <string name="common_ok">OK</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_save">Save</string>
     <string name="common_delete">Delete</string>
-    <string name="common_edit">Edit</string>
     <string name="common_archive">Archive</string>
     <string name="common_unarchive">Unarchive</string>
     <string name="common_new">New</string>
     <string name="common_add">Add</string>
     <string name="common_back">Back</string>
-    <string name="common_close">Close</string>
-    <string name="common_open">Open</string>
-    <string name="common_create">Create</string>
     <string name="common_go">Go</string>
     <string name="common_all">All</string>
     <string name="common_none">None</string>
@@ -37,6 +32,7 @@
     <string name="tab_log">Log</string>
     <string name="tab_activities">Activities</string>
     <string name="tab_weight">Weight</string>
+    <string name="tab_preferences">Preferences</string>
 
     <!-- ================= week strip ================= -->
     <string name="week_today">Today</string>
@@ -76,7 +72,6 @@
 
     <!-- ================= activities ================= -->
     <string name="activities_title">Activities</string>
-    <string name="activities_categories">Categories</string>
     <string name="activities_empty">No activities here.</string>
     <string name="activities_empty_in_category">No activities in this category.</string>
     <string name="activities_empty_hint">An activity declares what you do and how it is measured.</string>
@@ -93,16 +88,12 @@
     <string name="activities_day_volume">%1$s effective · %2$s warmup · %3$s</string>
     <string name="activities_day_distance">%1$s km · %2$s min · %3$s</string>
     <string name="activity_new_title">New activity</string>
+    <string name="activity_edit_title">Edit activity</string>
     <string name="activity_category_label">Category</string>
-    <string name="activity_muscles_label">Muscles</string>
     <string name="activity_measure_question">How is it measured?</string>
     <string name="activity_muscles_optional">Muscles (optional)</string>
     <string name="activity_muscles_hint">Leave empty and the log screen offers every muscle.</string>
-    <string name="activity_category_for">Category for \"%1$s\"</string>
-    <string name="activity_no_categories_hint">No categories yet. Create one from the Categories button.</string>
-    <string name="activity_muscles_for">Muscles for \"%1$s\"</string>
-    <string name="activity_muscles_dialog_hint">Ticked muscles become this activity\'s default in the log screen. Untick everything to offer the whole catalogue again.</string>
-    <string name="activity_no_muscles_hint">No muscles yet. Add them from the Log tab\'s Muscles screen.</string>
+    <string name="activity_no_muscles_hint">No muscles yet. Add them in Preferences, under Muscles.</string>
     <string name="activity_msg_name_blank">Give the activity a name.</string>
     <string name="activity_msg_name_taken">Another active activity already uses that name.</string>
     <string name="activity_msg_delete_blocked">Cannot delete: %1$s reference it. Archive it instead.</string>
@@ -134,6 +125,11 @@
     <string name="muscles_no_leaves">No leaves yet — add one before logging this group.</string>
     <string name="muscle_new_group">New muscle group</string>
     <string name="muscle_new">New muscle</string>
+    <string name="muscle_edit_group">Edit muscle group</string>
+    <string name="muscle_edit">Edit muscle</string>
+    <string name="preferences_title">Preferences</string>
+    <string name="preferences_muscles_hint">Groups and the muscles you log sets against.</string>
+    <string name="preferences_categories_hint">Labels that group your activities.</string>
     <string name="muscle_msg_name_blank">Give it a name.</string>
     <string name="muscle_msg_delete_blocked">Cannot delete: %1$s reference it. Archive it instead to keep its history.</string>
 
@@ -154,7 +150,7 @@
     <string name="log_delete_count">%1$s — %2$s across %3$s will be removed.</string>
     <string name="log_no_strength_activities">No strength activities yet. Create one on the Activities tab — only STRENGTH activities use this form.</string>
     <string name="log_no_muscles">No muscles in the catalogue.</string>
-    <string name="log_no_muscles_hint">Use \"Muscles\" above to add groups and leaves before logging.</string>
+    <string name="log_no_muscles_hint">Add groups and muscles in Preferences before logging.</string>
     <string name="log_untrained_header">Not trained in the last 7 days</string>
     <string name="log_totals_warmup">%1$s warmup</string>
     <string name="log_warmup_ratio">Warmup ratio %1$s</string>

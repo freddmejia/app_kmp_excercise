@@ -28,8 +28,11 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetActivityMuscles
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogViewModel
 import org.koin.core.context.stopKoin
@@ -92,6 +95,13 @@ class KoinGraphTest {
         // of by position would log every entry against day = activityId.
         val entry = koin.get<WorkoutEntryViewModel> { parametersOf(7L, 20_686L) }
         assertEquals(20_686L, entry.state.value.epochDay)
+        assertNotNull(koin.get<CategoryEditorViewModel> { parametersOf(0L) })
+        assertNotNull(koin.get<ActivityEditorViewModel> { parametersOf(0L) })
+        // Three parameters, and the last one is not a Long: the editor writes a group
+        // or a leaf depending on it, and getting it by type would write the wrong half
+        // of the catalogue.
+        val muscleEditor = koin.get<MuscleEditorViewModel> { parametersOf(3L, 0L, true) }
+        assertTrue(muscleEditor.state.value.isGroup)
     }
 
     @Test

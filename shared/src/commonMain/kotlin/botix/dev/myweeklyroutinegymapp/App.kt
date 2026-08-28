@@ -33,25 +33,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorScreen
+import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightScreen
 import botix.dev.myweeklyroutinegymapp.presentation.common.LocalSnackbarHostState
+import botix.dev.myweeklyroutinegymapp.presentation.preferences.PreferencesScreen
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymTheme
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogScreen
+import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogScreen
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.activities_title
+import myweeklyroutinegymapp.shared.generated.resources.activity_edit_title
+import myweeklyroutinegymapp.shared.generated.resources.activity_new_title
 import myweeklyroutinegymapp.shared.generated.resources.categories_title
+import myweeklyroutinegymapp.shared.generated.resources.category_edit_title
+import myweeklyroutinegymapp.shared.generated.resources.category_new_title
 import myweeklyroutinegymapp.shared.generated.resources.common_back
 import myweeklyroutinegymapp.shared.generated.resources.log_edit
 import myweeklyroutinegymapp.shared.generated.resources.log_new
 import myweeklyroutinegymapp.shared.generated.resources.log_title
+import myweeklyroutinegymapp.shared.generated.resources.muscle_edit
+import myweeklyroutinegymapp.shared.generated.resources.muscle_edit_group
+import myweeklyroutinegymapp.shared.generated.resources.muscle_new
+import myweeklyroutinegymapp.shared.generated.resources.muscle_new_group
 import myweeklyroutinegymapp.shared.generated.resources.muscles_title
+import myweeklyroutinegymapp.shared.generated.resources.preferences_title
 import myweeklyroutinegymapp.shared.generated.resources.tab_activities
 import myweeklyroutinegymapp.shared.generated.resources.tab_log
+import myweeklyroutinegymapp.shared.generated.resources.tab_preferences
 import myweeklyroutinegymapp.shared.generated.resources.tab_weight
 import myweeklyroutinegymapp.shared.generated.resources.weight_entry_edit
 import myweeklyroutinegymapp.shared.generated.resources.weight_entry_new
@@ -70,6 +84,13 @@ private enum class Destination(val label: StringResource, val icon: ImageVector)
     WORKOUT(Res.string.tab_log, GymIcons.Dumbbell),
     ACTIVITIES(Res.string.tab_activities, GymIcons.Catalogue),
     WEIGHT(Res.string.tab_weight, GymIcons.Scale),
+
+    /**
+     * The catalogues, and anything else that shapes the app rather than records what
+     * was done in it. Last, because it is the tab you visit least — the order of a
+     * navigation bar is a claim about how often each section is wanted.
+     */
+    PREFERENCES(Res.string.tab_preferences, GymIcons.Sliders),
 }
 
 /**
@@ -102,10 +123,39 @@ private sealed interface Screen {
         override val title get() = Res.string.log_title
     }
 
-    /** A detail of the log, not a peer of it: it edits what the log can record. */
+    /**
+     * The muscle catalogue.
+     *
+     * It sat under the Log tab, reached by a button in that screen's header, which put
+     * a piece of configuration inside the screen it configures. It is settings, and it
+     * lives with the other catalogue now.
+     */
     data object MuscleCatalog : Screen {
-        override val destination get() = Destination.WORKOUT
+        override val destination get() = Destination.PREFERENCES
         override val title get() = Res.string.muscles_title
+    }
+
+    /**
+     * One name: a muscle group or a leaf inside one, new or renamed.
+     *
+     * Four cases and one form. [isGroup] says which half of the catalogue is being
+     * written; a zero id is something that does not exist yet, which ids from
+     * `AUTOINCREMENT` can never be. [groupId] is still carried when editing a leaf,
+     * because the form names the group the leaf belongs to.
+     */
+    data class MuscleEditor(
+        val groupId: Long,
+        val muscleId: Long,
+        val isGroup: Boolean,
+    ) : Screen {
+        override val destination get() = Destination.PREFERENCES
+        override val title
+            get() = when {
+                isGroup && groupId == 0L -> Res.string.muscle_new_group
+                isGroup -> Res.string.muscle_edit_group
+                muscleId == 0L -> Res.string.muscle_new
+                else -> Res.string.muscle_edit
+            }
     }
 
     data object ActivityList : Screen {
@@ -113,10 +163,38 @@ private sealed interface Screen {
         override val title get() = Res.string.activities_title
     }
 
-    /** Same shape: a catalogue that edits one field of the screen behind it. */
+    /** The other catalogue, and for the same reason under the same tab. */
     data object ActivityCategories : Screen {
-        override val destination get() = Destination.ACTIVITIES
+        override val destination get() = Destination.PREFERENCES
         override val title get() = Res.string.categories_title
+    }
+
+    /** One activity, new or edited. Zero is the id of one that does not exist yet. */
+    data class ActivityEditor(val activityId: Long) : Screen {
+        override val destination get() = Destination.ACTIVITIES
+        override val title
+            get() = if (activityId == 0L) {
+                Res.string.activity_new_title
+            } else {
+                Res.string.activity_edit_title
+            }
+    }
+
+    /** One category, new or edited. Zero is the id of one that does not exist yet. */
+    data class CategoryEditor(val categoryId: Long) : Screen {
+        override val destination get() = Destination.PREFERENCES
+        override val title
+            get() = if (categoryId == 0L) {
+                Res.string.category_new_title
+            } else {
+                Res.string.category_edit_title
+            }
+    }
+
+    /** The section itself: a signpost to the two catalogues, and nothing else yet. */
+    data object Preferences : Screen {
+        override val destination get() = Destination.PREFERENCES
+        override val title get() = Res.string.preferences_title
     }
 
     /**
@@ -167,6 +245,7 @@ private val Destination.startScreen: Screen
         Destination.WORKOUT -> Screen.WorkoutLog
         Destination.ACTIVITIES -> Screen.ActivityList
         Destination.WEIGHT -> Screen.BodyWeight
+        Destination.PREFERENCES -> Screen.Preferences
     }
 
 /**
@@ -188,6 +267,10 @@ private const val TAG_ACTIVITY_CATEGORIES = 3L
 private const val TAG_BODY_WEIGHT = 4L
 private const val TAG_BODY_WEIGHT_ENTRY = 5L
 private const val TAG_LOG_ENTRY = 6L
+private const val TAG_PREFERENCES = 7L
+private const val TAG_MUSCLE_EDITOR = 8L
+private const val TAG_CATEGORY_EDITOR = 9L
+private const val TAG_ACTIVITY_EDITOR = 10L
 
 private fun Screen.saved(): List<Long> = when (this) {
     Screen.WorkoutLog -> listOf(TAG_WORKOUT_LOG, 0L, 0L, 0L)
@@ -199,6 +282,11 @@ private fun Screen.saved(): List<Long> = when (this) {
         listOf(TAG_BODY_WEIGHT_ENTRY, epochDay, if (existing) 1L else 0L, 0L)
     is Screen.LogEntry ->
         listOf(TAG_LOG_ENTRY, activityId, epochDay, if (existing) 1L else 0L)
+    Screen.Preferences -> listOf(TAG_PREFERENCES, 0L, 0L, 0L)
+    is Screen.MuscleEditor ->
+        listOf(TAG_MUSCLE_EDITOR, groupId, muscleId, if (isGroup) 1L else 0L)
+    is Screen.CategoryEditor -> listOf(TAG_CATEGORY_EDITOR, categoryId, 0L, 0L)
+    is Screen.ActivityEditor -> listOf(TAG_ACTIVITY_EDITOR, activityId, 0L, 0L)
 }
 
 private fun screenOf(tag: Long, arg0: Long, arg1: Long, arg2: Long): Screen = when (tag) {
@@ -209,6 +297,11 @@ private fun screenOf(tag: Long, arg0: Long, arg1: Long, arg2: Long): Screen = wh
     TAG_BODY_WEIGHT_ENTRY -> Screen.BodyWeightEntry(epochDay = arg0, existing = arg1 == 1L)
     TAG_LOG_ENTRY ->
         Screen.LogEntry(activityId = arg0, epochDay = arg1, existing = arg2 == 1L)
+    TAG_PREFERENCES -> Screen.Preferences
+    TAG_MUSCLE_EDITOR ->
+        Screen.MuscleEditor(groupId = arg0, muscleId = arg1, isGroup = arg2 == 1L)
+    TAG_CATEGORY_EDITOR -> Screen.CategoryEditor(categoryId = arg0)
+    TAG_ACTIVITY_EDITOR -> Screen.ActivityEditor(activityId = arg0)
     // Including TAG_WORKOUT_LOG, and anything a future version of the app wrote that
     // this one does not know: the log is where the app opens, so an unreadable stack
     // degrades to the start rather than to a crash.
@@ -373,7 +466,6 @@ fun App() {
                 CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
                     when (currentScreen) {
                         Screen.WorkoutLog -> WorkoutLogScreen(
-                            onManageMuscles = { push(Screen.MuscleCatalog) },
                             onOpenEntry = { activityId, epochDay, existing ->
                                 push(Screen.LogEntry(activityId, epochDay, existing))
                             },
@@ -388,12 +480,44 @@ fun App() {
                             onDone = { pop() },
                         )
 
-                        Screen.MuscleCatalog -> MuscleCatalogScreen()
+                        Screen.Preferences -> PreferencesScreen(
+                            onOpenMuscles = { push(Screen.MuscleCatalog) },
+                            onOpenCategories = { push(Screen.ActivityCategories) },
+                        )
 
-                        Screen.ActivityList ->
-                            ActivityListScreen(onManageCategories = { push(Screen.ActivityCategories) })
+                        Screen.MuscleCatalog -> MuscleCatalogScreen(
+                            onEditGroup = { groupId ->
+                                push(Screen.MuscleEditor(groupId, muscleId = 0L, isGroup = true))
+                            },
+                            onEditMuscle = { groupId, muscleId ->
+                                push(Screen.MuscleEditor(groupId, muscleId, isGroup = false))
+                            },
+                        )
 
-                        Screen.ActivityCategories -> ActivityCategoryScreen()
+                        is Screen.MuscleEditor -> MuscleEditorScreen(
+                            groupId = currentScreen.groupId,
+                            muscleId = currentScreen.muscleId,
+                            isGroup = currentScreen.isGroup,
+                            onDone = { pop() },
+                        )
+
+                        Screen.ActivityList -> ActivityListScreen(
+                            onEdit = { activityId -> push(Screen.ActivityEditor(activityId)) },
+                        )
+
+                        is Screen.ActivityEditor -> ActivityEditorScreen(
+                            activityId = currentScreen.activityId,
+                            onDone = { pop() },
+                        )
+
+                        Screen.ActivityCategories -> ActivityCategoryScreen(
+                            onEdit = { categoryId -> push(Screen.CategoryEditor(categoryId)) },
+                        )
+
+                        is Screen.CategoryEditor -> CategoryEditorScreen(
+                            categoryId = currentScreen.categoryId,
+                            onDone = { pop() },
+                        )
 
                         Screen.BodyWeight -> BodyWeightScreen(
                             onOpenEntry = { epochDay, existing ->

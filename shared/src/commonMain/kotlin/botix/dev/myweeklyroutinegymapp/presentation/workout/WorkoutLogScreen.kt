@@ -55,7 +55,6 @@ import myweeklyroutinegymapp.shared.generated.resources.log_nothing_day
 import myweeklyroutinegymapp.shared.generated.resources.log_nothing_today
 import myweeklyroutinegymapp.shared.generated.resources.log_pace
 import myweeklyroutinegymapp.shared.generated.resources.log_summary
-import myweeklyroutinegymapp.shared.generated.resources.muscles_title
 import myweeklyroutinegymapp.shared.generated.resources.plural_effective_sets
 import myweeklyroutinegymapp.shared.generated.resources.plural_muscles
 import org.jetbrains.compose.resources.pluralStringResource
@@ -73,7 +72,6 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun WorkoutLogScreen(
-    onManageMuscles: () -> Unit,
     onOpenEntry: (activityId: Long, epochDay: Long, existing: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WorkoutLogViewModel = koinViewModel(),
@@ -82,7 +80,6 @@ fun WorkoutLogScreen(
 
     WorkoutLogContent(
         state = state,
-        onManageMuscles = onManageMuscles,
         onOpenEntry = onOpenEntry,
         onSelectDay = viewModel::selectDay,
         onDeleteLog = viewModel::deleteLog,
@@ -96,7 +93,6 @@ fun WorkoutLogScreen(
 @Composable
 fun WorkoutLogContent(
     state: WorkoutLogUiState,
-    onManageMuscles: () -> Unit,
     onOpenEntry: (activityId: Long, epochDay: Long, existing: Boolean) -> Unit,
     onSelectDay: (Long) -> Unit,
     onDeleteLog: (Long) -> Unit,
@@ -116,10 +112,13 @@ fun WorkoutLogContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ScreenActions {
-            TextButton(onClick = onManageMuscles) { Text(stringResource(Res.string.muscles_title)) }
             // Creating a log is an explicit act rather than a side effect of picking
             // from a list that filled the screen. The strip decides *when*; this
             // decides *whether*.
+            //
+            // The Muscles button that used to sit beside it is in Settings now: it
+            // opened a catalogue, which is configuration, and it was the one control
+            // in this header that had nothing to do with the day on screen.
             Button(onClick = { showNewLogDialog = true }) { Text(stringResource(Res.string.log_new)) }
         }
 

@@ -2,19 +2,14 @@
 <!-- Español. Los apóstrofes van escapados como \' (formato Android). -->
 <resources>
 
-    <string name="common_ok">OK</string>
     <string name="common_cancel">Cancelar</string>
     <string name="common_save">Guardar</string>
     <string name="common_delete">Eliminar</string>
-    <string name="common_edit">Editar</string>
     <string name="common_archive">Archivar</string>
     <string name="common_unarchive">Desarchivar</string>
     <string name="common_new">Nueva</string>
     <string name="common_add">Añadir</string>
     <string name="common_back">Atrás</string>
-    <string name="common_close">Cerrar</string>
-    <string name="common_open">Abrir</string>
-    <string name="common_create">Crear</string>
     <string name="common_go">Ir</string>
     <string name="common_all">Todas</string>
     <string name="common_none">Ninguna</string>
@@ -27,6 +22,7 @@
     <string name="tab_log">Registro</string>
     <string name="tab_activities">Actividades</string>
     <string name="tab_weight">Peso</string>
+    <string name="tab_preferences">Preferencias</string>
 
     <string name="week_today">Hoy</string>
     <string name="week_select_date">Elegir fecha</string>
@@ -60,7 +56,6 @@
     <string name="week_range_cross_year">%1$s %2$s %3$s – %4$s %5$s %6$s</string>
 
     <string name="activities_title">Actividades</string>
-    <string name="activities_categories">Categorías</string>
     <string name="activities_empty">No hay actividades aquí.</string>
     <string name="activities_empty_in_category">No hay actividades en esta categoría.</string>
     <string name="activities_empty_hint">Una actividad declara qué haces y cómo se mide.</string>
@@ -76,16 +71,12 @@
     <string name="activities_day_volume">%1$s efectivas · %2$s calentamiento · %3$s</string>
     <string name="activities_day_distance">%1$s km · %2$s min · %3$s</string>
     <string name="activity_new_title">Nueva actividad</string>
+    <string name="activity_edit_title">Editar actividad</string>
     <string name="activity_category_label">Categoría</string>
-    <string name="activity_muscles_label">Músculos</string>
     <string name="activity_measure_question">¿Cómo se mide?</string>
     <string name="activity_muscles_optional">Músculos (opcional)</string>
     <string name="activity_muscles_hint">Déjalo vacío y la pantalla de registro ofrecerá todos los músculos.</string>
-    <string name="activity_category_for">Categoría de \"%1$s\"</string>
-    <string name="activity_no_categories_hint">Aún no hay categorías. Crea una desde el botón Categorías.</string>
-    <string name="activity_muscles_for">Músculos de \"%1$s\"</string>
-    <string name="activity_muscles_dialog_hint">Los músculos marcados serán la selección por defecto de esta actividad en el registro. Desmárcalos todos para volver a ofrecer el catálogo completo.</string>
-    <string name="activity_no_muscles_hint">Aún no hay músculos. Añádelos desde la pantalla Músculos de la pestaña Registro.</string>
+    <string name="activity_no_muscles_hint">Aún no hay músculos. Añádelos en Preferencias, en Músculos.</string>
     <string name="activity_msg_name_blank">Ponle un nombre a la actividad.</string>
     <string name="activity_msg_name_taken">Otra actividad activa ya usa ese nombre.</string>
     <string name="activity_msg_delete_blocked">No se puede eliminar: %1$s la referencian. Archívala en su lugar.</string>
@@ -115,6 +106,11 @@
     <string name="muscles_no_leaves">Aún no hay músculos — añade uno antes de registrar este grupo.</string>
     <string name="muscle_new_group">Nuevo grupo muscular</string>
     <string name="muscle_new">Nuevo músculo</string>
+    <string name="muscle_edit_group">Editar grupo muscular</string>
+    <string name="muscle_edit">Editar músculo</string>
+    <string name="preferences_title">Preferencias</string>
+    <string name="preferences_muscles_hint">Grupos y los músculos a los que apuntas las series.</string>
+    <string name="preferences_categories_hint">Etiquetas que agrupan tus actividades.</string>
     <string name="muscle_msg_name_blank">Ponle un nombre.</string>
     <string name="muscle_msg_delete_blocked">No se puede eliminar: %1$s lo referencian. Archívalo para conservar su historial.</string>
 
@@ -132,7 +128,7 @@
     <string name="log_delete_count">%1$s — se eliminarán %2$s en %3$s.</string>
     <string name="log_no_strength_activities">Aún no hay actividades de fuerza. Crea una en la pestaña Actividades — solo las de tipo FUERZA usan este formulario.</string>
     <string name="log_no_muscles">No hay músculos en el catálogo.</string>
-    <string name="log_no_muscles_hint">Usa \"Músculos\" arriba para añadir grupos y músculos antes de registrar.</string>
+    <string name="log_no_muscles_hint">Añade grupos y músculos en Preferencias antes de registrar.</string>
     <string name="log_untrained_header">No entrenados en los últimos 7 días</string>
     <string name="log_totals_warmup">%1$s de calentamiento</string>
     <string name="log_warmup_ratio">Ratio de calentamiento %1$s</string>

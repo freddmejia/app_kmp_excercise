@@ -53,10 +53,13 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.RenameMuscleUseCas
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetMuscleSetsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogViewModel
 import org.koin.core.KoinApplication
@@ -180,6 +183,32 @@ val viewModelModule = module {
     // Destructured, not two `get()` calls: ParametersHolder.get() resolves by type
     // and would hand back the same first Long twice, quietly logging every entry
     // against day = activityId.
+    viewModel { (categoryId: Long) -> CategoryEditorViewModel(categoryId, get(), get(), get()) }
+    viewModel { (activityId: Long) ->
+        ActivityEditorViewModel(
+            activityId = activityId,
+            observeActivity = get(),
+            observeCategories = get(),
+            observeMusclePicker = get(),
+            observeLinks = get(),
+            createActivity = get(),
+            updateActivity = get(),
+            changeType = get(),
+            setMuscles = get(),
+        )
+    }
+    viewModel { (groupId: Long, muscleId: Long, isGroup: Boolean) ->
+        MuscleEditorViewModel(
+            groupId = groupId,
+            muscleId = muscleId,
+            isGroup = isGroup,
+            observeGroups = get(),
+            observeMuscles = get(),
+            createGroup = get(),
+            createMuscle = get(),
+            rename = get(),
+        )
+    }
     viewModel { (activityId: Long, epochDay: Long) ->
         WorkoutEntryViewModel(
             activityId = activityId,

@@ -134,6 +134,31 @@ object GymIcons {
         }
     }
 
+    /**
+     * Settings. Two sliders, each with its knob at a different stop.
+     *
+     * Not a cogwheel: a cog at 24dp with a 2-unit stroke is a ring of tooth-sized
+     * gaps that fill in at any smaller optical size, and the teeth would be the only
+     * curved detail in a set built from straight runs. Sliders also say what this
+     * section actually is — things you set, not machinery.
+     */
+    val Sliders: ImageVector by lazy {
+        gymIcon("Sliders") {
+            // Two rails, and a knob on each: the knobs sit at different stops so the
+            // pair reads as adjustable rather than as a list.
+            moveTo(4f, 8.5f)
+            lineTo(20f, 8.5f)
+            moveTo(4f, 15.5f)
+            lineTo(20f, 15.5f)
+            // Drawn as short vertical bars rather than circles, which at this weight
+            // would either outline (too light) or fill (too heavy) against the rails.
+            moveTo(9f, 6f)
+            lineTo(9f, 11f)
+            moveTo(15f, 13f)
+            lineTo(15f, 18f)
+        }
+    }
+
     /** Body weight. A scale: a platform with a dial and a needle. */
     val Scale: ImageVector by lazy {
         gymIcon("Scale") {
