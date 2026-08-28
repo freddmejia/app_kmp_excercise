@@ -61,6 +61,21 @@ class ObserveActivitiesUseCase(private val repository: ActivityRepository) {
     }
 }
 
+/**
+ * One activity, watched.
+ *
+ * For the screens that are *about* a single activity rather than the catalogue. It
+ * takes the id and not the row, so a rename or a type change made elsewhere reaches
+ * the open screen instead of leaving it describing a version of the activity that no
+ * longer exists.
+ *
+ * Unfiltered by archived state on purpose: a session logged against an activity that
+ * was archived afterwards still has to open.
+ */
+class ObserveActivityUseCase(private val repository: ActivityRepository) {
+    operator fun invoke(id: Long): Flow<Activity?> = repository.observeById(id)
+}
+
 /** Active activities ordered by how often they are logged — the picker's ordering. */
 class ObserveActivityPickerUseCase(private val repository: ActivityRepository) {
     operator fun invoke(): Flow<List<ActivityUsage>> = repository.observeActiveByUsage()

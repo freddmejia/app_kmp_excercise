@@ -140,6 +140,7 @@
     <!-- ================= workout log ================= -->
     <string name="log_title">Log workout</string>
     <string name="log_new">New log</string>
+    <string name="log_edit">Edit log</string>
     <string name="log_nothing_today">Nothing logged today.</string>
     <string name="log_nothing_day">Nothing logged on this day.</string>
     <string name="log_hint_no_activities">Create a strength activity on the Activities tab first.</string>
@@ -163,7 +164,6 @@
     <string name="log_msg_removed">Removed.</string>
     <string name="log_msg_invalid_sets">A checked muscle needs at least one effective set.</string>
     <string name="log_msg_activity_missing">That activity no longer exists.</string>
-    <string name="log_msg_not_strength">This form only fits strength activities.</string>
     <string name="log_distance_km">Distance (km)</string>
     <string name="log_duration_min">Duration (min)</string>
     <string name="log_distance_time_title">Log %1$s</string>
@@ -195,7 +195,12 @@
     <string name="weight_mode_daily">daily</string>
     <string name="weight_mode_monthly">monthly</string>
     <string name="weight_preset_days">%1$sd</string>
-    <string name="weight_input_label">kg for %1$s</string>
+    <string name="weight_input_label">Weight (kg)</string>
+    <string name="weight_note_label">Note (optional)</string>
+    <string name="weight_entry_new">New measurement</string>
+    <string name="weight_entry_edit">Edit measurement</string>
+    <string name="weight_delete_title">Delete this measurement?</string>
+    <string name="weight_delete_text">%1$s kg on %2$s will be removed.</string>
     <string name="weight_log">Log</string>
     <string name="weight_replace">Replace</string>
     <string name="weight_future">That day has not happened yet.</string>

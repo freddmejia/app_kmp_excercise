@@ -28,14 +28,18 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetActivityMuscles
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogViewModel
 import org.koin.core.context.stopKoin
+import org.koin.core.parameter.parametersOf
 import org.koin.core.error.NoDefinitionFoundException
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
@@ -80,6 +84,14 @@ class KoinGraphTest {
         assertNotNull(koin.get<BodyWeightViewModel>())
         assertNotNull(koin.get<WorkoutLogViewModel>())
         assertNotNull(koin.get<ActivityCategoryViewModel>())
+        // Takes the day it edits as a runtime parameter, so it is the one binding
+        // here that cannot be resolved by type alone — and the one most easily left
+        // half-wired, since a missing parameter only shows up when the screen opens.
+        assertNotNull(koin.get<BodyWeightEntryViewModel> { parametersOf(20_686L) })
+        // Two parameters of the same type, in order: resolving these by type instead
+        // of by position would log every entry against day = activityId.
+        val entry = koin.get<WorkoutEntryViewModel> { parametersOf(7L, 20_686L) }
+        assertEquals(20_686L, entry.state.value.epochDay)
     }
 
     @Test

@@ -118,6 +118,7 @@
 
     <string name="log_title">Enregistrer la séance</string>
     <string name="log_new">Nouvelle séance</string>
+    <string name="log_edit">Modifier la séance</string>
     <string name="log_nothing_today">Rien enregistré aujourd\'hui.</string>
     <string name="log_nothing_day">Rien enregistré ce jour-là.</string>
     <string name="log_hint_no_activities">Créez d\'abord une activité de force dans l\'onglet Activités.</string>
@@ -139,7 +140,6 @@
     <string name="log_msg_removed">Retiré.</string>
     <string name="log_msg_invalid_sets">Un muscle coché exige au moins une série effective.</string>
     <string name="log_msg_activity_missing">Cette activité n\'existe plus.</string>
-    <string name="log_msg_not_strength">Ce formulaire ne convient qu\'aux activités de force.</string>
     <string name="log_distance_km">Distance (km)</string>
     <string name="log_duration_min">Durée (min)</string>
     <string name="log_distance_time_title">Enregistrer %1$s</string>
@@ -169,7 +169,12 @@
     <string name="weight_mode_daily">journalière</string>
     <string name="weight_mode_monthly">mensuelle</string>
     <string name="weight_preset_days">%1$sj</string>
-    <string name="weight_input_label">kg du %1$s</string>
+    <string name="weight_input_label">Poids (kg)</string>
+    <string name="weight_note_label">Note (facultative)</string>
+    <string name="weight_entry_new">Nouvelle mesure</string>
+    <string name="weight_entry_edit">Modifier la mesure</string>
+    <string name="weight_delete_title">Supprimer cette mesure ?</string>
+    <string name="weight_delete_text">%1$s kg du %2$s seront supprimés.</string>
     <string name="weight_log">Enregistrer</string>
     <string name="weight_replace">Remplacer</string>
     <string name="weight_future">Ce jour n\'est pas encore arrivé.</string>

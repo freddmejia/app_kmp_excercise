@@ -7,8 +7,6 @@ import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightChart
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightEntry
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.BodyWeightRangePreset
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.DeleteBodyWeightUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.LogBodyWeightResult
-import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.LogBodyWeightUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.ObserveBodyWeightChartUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.ObserveBodyWeightHistoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.bodyweight.ObserveBodyWeightWeekUseCase
@@ -25,16 +23,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/**
+ * What this screen has to announce.
+ *
+ * One member, because this screen now only reads and deletes: logging moved to
+ * [BodyWeightEntryViewModel], and the things that can go wrong while logging are
+ * reasons a *form* was refused rather than news about the list — they are reported
+ * where they happen, under the field, as [BodyWeightEntryError].
+ */
 sealed interface BodyWeightMessage {
-    data object Logged : BodyWeightMessage
-
-    /** Zero, negative or unparseable: the form keeps the value and shows the error. */
-    data object InvalidWeight : BodyWeightMessage
-
     data object Deleted : BodyWeightMessage
-
-    /** The selected day has not happened yet. */
-    data object FutureDay : BodyWeightMessage
 }
 
 data class BodyWeightUiState(
@@ -53,11 +51,11 @@ data class BodyWeightUiState(
     val daysWithEntry: Set<Long> get() = weekEntries.keys
 
     /**
-     * What is already recorded for the day being logged, if anything.
+     * What the selected day already holds, if anything.
      *
-     * Exposed as state rather than fetched when the button is pressed: the warning
-     * has to be readable *before* committing, and one measurement per day means
-     * saving replaces rather than adds.
+     * The strip's log button reads this: one measurement per day means opening the
+     * editor on a day that has one is a correction, not a second reading, and the
+     * button says so before it is pressed rather than after.
      */
     val entryForSelectedDay: BodyWeightEntry? get() = weekEntries[selectedDay]
 
@@ -69,7 +67,6 @@ data class BodyWeightUiState(
 class BodyWeightViewModel(
     private val observeChart: ObserveBodyWeightChartUseCase,
     private val observeHistory: ObserveBodyWeightHistoryUseCase,
-    private val logBodyWeight: LogBodyWeightUseCase,
     private val deleteBodyWeight: DeleteBodyWeightUseCase,
     private val observeWeek: ObserveBodyWeightWeekUseCase,
     clock: Clock,
@@ -130,28 +127,6 @@ class BodyWeightViewModel(
 
     fun consumeMessage() {
         message.value = null
-    }
-
-    /**
-     * Records a measurement. [weightKg] is nullable so the screen can hand over an
-     * unparseable field directly and get the same validation as an out-of-range
-     * number, instead of inventing its own rule for "not a number".
-     */
-    fun log(weightKg: Double?, epochDay: Long? = null, note: String? = null) {
-        viewModelScope.launch {
-            if (weightKg == null) {
-                message.value = BodyWeightMessage.InvalidWeight
-                return@launch
-            }
-            // Defaults to the day on the strip, not to today: selecting a day is the
-            // whole point of being able to select one.
-            val result = logBodyWeight(weightKg, epochDay ?: selectedDay.value, note)
-            message.value = when (result) {
-                LogBodyWeightResult.Logged -> BodyWeightMessage.Logged
-                LogBodyWeightResult.InvalidWeight -> BodyWeightMessage.InvalidWeight
-                LogBodyWeightResult.FutureDay -> BodyWeightMessage.FutureDay
-            }
-        }
     }
 
     fun delete(id: Long) {

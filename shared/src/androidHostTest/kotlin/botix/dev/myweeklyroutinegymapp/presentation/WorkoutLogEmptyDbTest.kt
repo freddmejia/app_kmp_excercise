@@ -40,10 +40,12 @@ import kotlin.test.assertTrue
 /**
  * The Log screen on a database with nothing in it — a first launch.
  *
- * Its state is a combine of nine flows, and `combine` emits nothing at all until
- * *every* source has emitted once. Each is a `mapToList` that yields an empty list,
- * so an empty database does settle; add a source that stays silent when it has no
- * rows and the screen would hold its spinner forever, with no failure to point at.
+ * Its state is a combine, and `combine` emits nothing at all until *every* source has
+ * emitted once. Each is a `mapToList` that yields an empty list, so an empty database
+ * does settle; add a source that stays silent when it has no rows and the screen would
+ * hold its spinner forever, with no failure to point at. (The session half of this
+ * screen moved to `WorkoutEntryViewModel`, so there are fewer sources than there were
+ * — the trap is the same one either way.)
  *
  * The repositories are rebuilt on the test dispatcher rather than taken from
  * `repositoryModule`, which would leave them on the real IO dispatcher — emissions

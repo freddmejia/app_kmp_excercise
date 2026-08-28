@@ -104,6 +104,12 @@ fun weekOf(day: Long): List<Long> = weekStartOf(day).let { start -> (start..star
  * week arithmetic.
  *
  * [markedDays] get a dot — the days something was logged.
+ *
+ * [trailing] fills the far end of the date row, opposite the date itself. It is where
+ * a screen puts the one action that acts on the selected day — the body-weight screen
+ * puts its log button there — because the date is that action's subject. It is empty
+ * for the screens that have no such action, and the row then looks exactly as it did
+ * before.
  */
 @Composable
 fun WeekStrip(
@@ -115,6 +121,7 @@ fun WeekStrip(
     onStepWeek: (Boolean) -> Unit,
     onGoToToday: () -> Unit,
     modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -124,44 +131,57 @@ fun WeekStrip(
         // weeks on and "Lun 7" is otherwise unplaceable. [today] keeps its own mark
         // in the strip (the outlined cell), which is what says where "now" is.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.fillMaxWidth(),
+            // The date at one end of the row, the day's action at the other.
+            // SpaceBetween rather than a spacer, so a strip with no trailing content
+            // leaves the date exactly where it has always been.
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                selectedDay.asFullDate(),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                // Reads as the selection, acts as "go home": tapping it returns to
-                // today. Always enabled — pressing it while already on today is a
-                // no-op, which is quieter than a button that appears and disappears
-                // under the finger as the selection moves.
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable(
-                        onClickLabel = stringResource(Res.string.week_today),
-                        role = Role.Button,
-                        onClick = onGoToToday,
-                    )
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-            )
-            // A separate target, not part of the date: one tap goes to today, the
-            // other opens the calendar, and they must not be reachable by the same
-            // press. The caret is the affordance the emoji used to carry, minus the
-            // artwork — the calendar glyph has a date drawn into it, which sitting
-            // beside a live date read as data.
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(
-                        onClickLabel = stringResource(Res.string.week_select_date),
-                        role = Role.Button,
-                        onClick = { showDatePicker = true },
-                    )
-                    .size(32.dp),
-                contentAlignment = Alignment.Center,
+            // The date and its caret travel together: they are two targets on one
+            // subject, and a gap opening between them would read as two controls.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("\u25BE", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    selectedDay.asFullDate(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    // Reads as the selection, acts as "go home": tapping it returns to
+                    // today. Always enabled — pressing it while already on today is a
+                    // no-op, which is quieter than a button that appears and disappears
+                    // under the finger as the selection moves.
+                    modifier = Modifier
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(
+                            onClickLabel = stringResource(Res.string.week_today),
+                            role = Role.Button,
+                            onClick = onGoToToday,
+                        )
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+                // A separate target, not part of the date: one tap goes to today, the
+                // other opens the calendar, and they must not be reachable by the same
+                // press. The caret is the affordance the emoji used to carry, minus the
+                // artwork — the calendar glyph has a date drawn into it, which sitting
+                // beside a live date read as data.
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(
+                            onClickLabel = stringResource(Res.string.week_select_date),
+                            role = Role.Button,
+                            onClick = { showDatePicker = true },
+                        )
+                        .size(32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("\u25BE", style = MaterialTheme.typography.titleSmall)
+                }
             }
+
+            trailing()
         }
 
         // The arrows sit on the row they act on. They step the week the cells show,

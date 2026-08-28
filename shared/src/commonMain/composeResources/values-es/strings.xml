@@ -120,6 +120,7 @@
 
     <string name="log_title">Registrar entrenamiento</string>
     <string name="log_new">Nuevo registro</string>
+    <string name="log_edit">Editar registro</string>
     <string name="log_nothing_today">Nada registrado hoy.</string>
     <string name="log_nothing_day">Nada registrado ese día.</string>
     <string name="log_hint_no_activities">Crea primero una actividad de fuerza en la pestaña Actividades.</string>
@@ -141,7 +142,6 @@
     <string name="log_msg_removed">Eliminado.</string>
     <string name="log_msg_invalid_sets">Un músculo marcado necesita al menos una serie efectiva.</string>
     <string name="log_msg_activity_missing">Esa actividad ya no existe.</string>
-    <string name="log_msg_not_strength">Este formulario solo sirve para actividades de fuerza.</string>
     <string name="log_distance_km">Distancia (km)</string>
     <string name="log_duration_min">Duración (min)</string>
     <string name="log_distance_time_title">Registrar %1$s</string>
@@ -171,7 +171,12 @@
     <string name="weight_mode_daily">diaria</string>
     <string name="weight_mode_monthly">mensual</string>
     <string name="weight_preset_days">%1$sd</string>
-    <string name="weight_input_label">kg del %1$s</string>
+    <string name="weight_input_label">Peso (kg)</string>
+    <string name="weight_note_label">Nota (opcional)</string>
+    <string name="weight_entry_new">Nueva medida</string>
+    <string name="weight_entry_edit">Editar medida</string>
+    <string name="weight_delete_title">¿Eliminar esta medida?</string>
+    <string name="weight_delete_text">Se eliminarán %1$s kg del %2$s.</string>
     <string name="weight_log">Registrar</string>
     <string name="weight_replace">Reemplazar</string>
     <string name="weight_future">Ese día todavía no ha llegado.</string>

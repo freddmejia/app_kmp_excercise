@@ -34,21 +34,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListScreen
+import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightScreen
 import botix.dev.myweeklyroutinegymapp.presentation.common.LocalSnackbarHostState
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymTheme
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogScreen
+import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogScreen
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.activities_title
 import myweeklyroutinegymapp.shared.generated.resources.categories_title
 import myweeklyroutinegymapp.shared.generated.resources.common_back
+import myweeklyroutinegymapp.shared.generated.resources.log_edit
+import myweeklyroutinegymapp.shared.generated.resources.log_new
 import myweeklyroutinegymapp.shared.generated.resources.log_title
 import myweeklyroutinegymapp.shared.generated.resources.muscles_title
 import myweeklyroutinegymapp.shared.generated.resources.tab_activities
 import myweeklyroutinegymapp.shared.generated.resources.tab_log
 import myweeklyroutinegymapp.shared.generated.resources.tab_weight
+import myweeklyroutinegymapp.shared.generated.resources.weight_entry_edit
+import myweeklyroutinegymapp.shared.generated.resources.weight_entry_new
 import myweeklyroutinegymapp.shared.generated.resources.weight_title
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -56,8 +62,8 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * The three top-level tabs.
  *
- * A tab is not a screen: it is a *section*, and each one owns a small stack of routes
- * (see [Route]). The icon comes from the app's own set rather than a font emoji, so it
+ * A tab is not a screen: it is a *section*, and each one owns a small stack of
+ * screens (see [Screen]). The icon comes from the app's own set rather than a font emoji, so it
  * takes the navigation bar's tint like any other vector.
  */
 private enum class Destination(val label: StringResource, val icon: ImageVector) {
@@ -67,50 +73,153 @@ private enum class Destination(val label: StringResource, val icon: ImageVector)
 }
 
 /**
- * Every screen the app can show, and which tab it belongs to.
+ * Every screen the app can show, which tab it belongs to, and what the app bar calls
+ * it while it is up.
  *
- * Still no navigation library: these routes take no arguments, have no deep links and
- * nest exactly one level deep, so a nav graph would add a dependency to model a list.
- * What matters is that this list is the *single* source of truth for where the app is.
- * The catalogue screens used to be booleans held beside a selected-tab index, which is
- * two pieces of state that can disagree — the bar could say "Activities" while the
- * muscle catalogue was on screen. Now the bar reads its selection off the back stack,
- * so it cannot drift from what is actually rendered.
+ * Still no navigation library. These routes nest exactly one level deep and have no
+ * deep links, and the one argument any of them takes is a single `Long`, so a nav
+ * graph would be a dependency and a URL grammar bought to model a list. What matters
+ * is that this list is the *single* source of truth for where the app is: the
+ * catalogue screens used to be booleans held beside a selected-tab index, which is two
+ * pieces of state that can disagree — the bar could say "Activities" while the muscle
+ * catalogue was on screen. The bar now reads its selection off the back stack, so it
+ * cannot drift from what is actually rendered.
  *
- * Introduce a real nav graph when a route gains an argument or a deep link.
+ * A sealed interface rather than the enum it was, because [BodyWeightEntry] carries
+ * the day it is editing. That is also what lets the bar name a screen without asking
+ * it: a route that knows whether it opened onto an existing reading knows whether the
+ * title should say new or edit.
+ *
+ * Introduce a real nav graph when a route gains a deep link, or when the arguments
+ * outgrow what [ScreenStackSaver] can flatten.
  */
-private enum class Route(val destination: Destination, val title: StringResource) {
-    WORKOUT_LOG(Destination.WORKOUT, Res.string.log_title),
+private sealed interface Screen {
+    val destination: Destination
+    val title: StringResource
+
+    data object WorkoutLog : Screen {
+        override val destination get() = Destination.WORKOUT
+        override val title get() = Res.string.log_title
+    }
 
     /** A detail of the log, not a peer of it: it edits what the log can record. */
-    MUSCLE_CATALOG(Destination.WORKOUT, Res.string.muscles_title),
+    data object MuscleCatalog : Screen {
+        override val destination get() = Destination.WORKOUT
+        override val title get() = Res.string.muscles_title
+    }
 
-    ACTIVITY_LIST(Destination.ACTIVITIES, Res.string.activities_title),
+    data object ActivityList : Screen {
+        override val destination get() = Destination.ACTIVITIES
+        override val title get() = Res.string.activities_title
+    }
 
     /** Same shape: a catalogue that edits one field of the screen behind it. */
-    ACTIVITY_CATEGORIES(Destination.ACTIVITIES, Res.string.categories_title),
+    data object ActivityCategories : Screen {
+        override val destination get() = Destination.ACTIVITIES
+        override val title get() = Res.string.categories_title
+    }
 
-    BODY_WEIGHT(Destination.WEIGHT, Res.string.weight_title),
+    /**
+     * One log, being written or filled in further.
+     *
+     * The pair is the argument for the same reason the body-weight editor takes a
+     * day: `StartOrResumeSessionUseCase` finds a session by (activity, day) and
+     * creates one only when it finds none, so the pair already identifies the row and
+     * the id is something the database decides afterwards.
+     *
+     * [existing] is what the day's list already knew when the row was tapped — see
+     * [BodyWeightEntry] for why it is not read back out of the database here.
+     */
+    data class LogEntry(
+        val activityId: Long,
+        val epochDay: Long,
+        val existing: Boolean,
+    ) : Screen {
+        override val destination get() = Destination.WORKOUT
+        override val title get() = if (existing) Res.string.log_edit else Res.string.log_new
+    }
+
+    data object BodyWeight : Screen {
+        override val destination get() = Destination.WEIGHT
+        override val title get() = Res.string.weight_title
+    }
+
+    /**
+     * One day's reading, being written or corrected.
+     *
+     * The day is the argument because a day holds at most one reading — see
+     * `BodyWeightEntryViewModel`. [existing] is not derived from it: finding out
+     * whether the day already has a reading is a database read, and the title would
+     * flip from "New" to "Edit" a frame after the screen opened. The caller already
+     * knows — it was looking at that very row, or at the strip's own week — so it
+     * says.
+     */
+    data class BodyWeightEntry(val epochDay: Long, val existing: Boolean) : Screen {
+        override val destination get() = Destination.WEIGHT
+        override val title
+            get() = if (existing) Res.string.weight_entry_edit else Res.string.weight_entry_new
+    }
 }
 
 /** Where a tab lands when it is selected from the bar. */
-private val Destination.startRoute: Route
+private val Destination.startScreen: Screen
     get() = when (this) {
-        Destination.WORKOUT -> Route.WORKOUT_LOG
-        Destination.ACTIVITIES -> Route.ACTIVITY_LIST
-        Destination.WEIGHT -> Route.BODY_WEIGHT
+        Destination.WORKOUT -> Screen.WorkoutLog
+        Destination.ACTIVITIES -> Screen.ActivityList
+        Destination.WEIGHT -> Screen.BodyWeight
     }
 
 /**
- * Survives process death as a list of ordinals.
+ * Survives process death as a flat list of `Long`s, four per screen: a tag, and three
+ * slots of argument.
  *
- * Enums have no built-in `Saver` in Compose Multiplatform — storing the constants
- * directly would restore as null and drop the user back on the log screen after the
- * system killed the app in the background.
+ * Compose Multiplatform has no built-in `Saver` for either an enum or a sealed type —
+ * storing the objects themselves restores as null and drops the user back on the log
+ * screen after the system kills the app in the background. Fixed-width slots rather
+ * than a variable-length encoding, because the alternative is a parser: two routes
+ * carry arguments now and they already disagree about how many. A third shape, or an
+ * argument that is not a number, is the moment to reach for a real navigation library
+ * instead of widening this again.
  */
-private val RouteStackSaver: Saver<List<Route>, Any> = listSaver(
-    save = { stack -> stack.map { it.ordinal } },
-    restore = { saved -> saved.map { Route.entries[it] } },
+private const val TAG_WORKOUT_LOG = 0L
+private const val TAG_MUSCLE_CATALOG = 1L
+private const val TAG_ACTIVITY_LIST = 2L
+private const val TAG_ACTIVITY_CATEGORIES = 3L
+private const val TAG_BODY_WEIGHT = 4L
+private const val TAG_BODY_WEIGHT_ENTRY = 5L
+private const val TAG_LOG_ENTRY = 6L
+
+private fun Screen.saved(): List<Long> = when (this) {
+    Screen.WorkoutLog -> listOf(TAG_WORKOUT_LOG, 0L, 0L, 0L)
+    Screen.MuscleCatalog -> listOf(TAG_MUSCLE_CATALOG, 0L, 0L, 0L)
+    Screen.ActivityList -> listOf(TAG_ACTIVITY_LIST, 0L, 0L, 0L)
+    Screen.ActivityCategories -> listOf(TAG_ACTIVITY_CATEGORIES, 0L, 0L, 0L)
+    Screen.BodyWeight -> listOf(TAG_BODY_WEIGHT, 0L, 0L, 0L)
+    is Screen.BodyWeightEntry ->
+        listOf(TAG_BODY_WEIGHT_ENTRY, epochDay, if (existing) 1L else 0L, 0L)
+    is Screen.LogEntry ->
+        listOf(TAG_LOG_ENTRY, activityId, epochDay, if (existing) 1L else 0L)
+}
+
+private fun screenOf(tag: Long, arg0: Long, arg1: Long, arg2: Long): Screen = when (tag) {
+    TAG_MUSCLE_CATALOG -> Screen.MuscleCatalog
+    TAG_ACTIVITY_LIST -> Screen.ActivityList
+    TAG_ACTIVITY_CATEGORIES -> Screen.ActivityCategories
+    TAG_BODY_WEIGHT -> Screen.BodyWeight
+    TAG_BODY_WEIGHT_ENTRY -> Screen.BodyWeightEntry(epochDay = arg0, existing = arg1 == 1L)
+    TAG_LOG_ENTRY ->
+        Screen.LogEntry(activityId = arg0, epochDay = arg1, existing = arg2 == 1L)
+    // Including TAG_WORKOUT_LOG, and anything a future version of the app wrote that
+    // this one does not know: the log is where the app opens, so an unreadable stack
+    // degrades to the start rather than to a crash.
+    else -> Screen.WorkoutLog
+}
+
+private val ScreenStackSaver: Saver<List<Screen>, Any> = listSaver(
+    save = { stack -> stack.flatMap { it.saved() } },
+    restore = { flat ->
+        flat.chunked(4).map { (tag, arg0, arg1, arg2) -> screenOf(tag, arg0, arg1, arg2) }
+    },
 )
 
 /**
@@ -131,10 +240,10 @@ private val RouteStackSaver: Saver<List<Route>, Any> = listSaver(
 @Composable
 fun App() {
     GymTheme {
-        var backStack by rememberSaveable(stateSaver = RouteStackSaver) {
-            mutableStateOf(listOf(Route.WORKOUT_LOG))
+        var backStack by rememberSaveable(stateSaver = ScreenStackSaver) {
+            mutableStateOf(listOf<Screen>(Screen.WorkoutLog))
         }
-        val currentRoute = backStack.last()
+        val currentScreen = backStack.last()
         // One queue for the whole app, so a message raised on any screen lands in the
         // same place and two of them cannot overlap.
         val snackbarHostState = remember { SnackbarHostState() }
@@ -144,16 +253,16 @@ fun App() {
         // coming back to the app on one of them — instead of on the log you actually
         // use — is the wrong default.
         fun select(destination: Destination) {
-            backStack = listOf(destination.startRoute)
+            backStack = listOf(destination.startScreen)
         }
 
-        fun push(route: Route) {
-            backStack = backStack + route
+        fun push(screen: Screen) {
+            backStack = backStack + screen
         }
 
         // Never empties: something has to be on screen.
         fun pop() {
-            backStack = backStack.dropLast(1).ifEmpty { listOf(Route.WORKOUT_LOG) }
+            backStack = backStack.dropLast(1).ifEmpty { listOf(Screen.WorkoutLog) }
         }
 
         Scaffold(
@@ -183,7 +292,7 @@ fun App() {
                     // The screen names itself in one place for every screen, at a
                     // fixed height, instead of each one drawing its own headline at
                     // whatever offset its content happened to start at.
-                    title = { Text(stringResource(currentRoute.title)) },
+                    title = { Text(stringResource(currentScreen.title)) },
                     navigationIcon = {
                         // Only on a pushed route, and it is the one way back: iOS has
                         // no system back at all, and the Android gesture is not wired
@@ -224,7 +333,7 @@ fun App() {
                         NavigationBarItem(
                             // Derived, not stored. The bar has no idea of its own
                             // about which tab is current; it asks the back stack.
-                            selected = destination == currentRoute.destination,
+                            selected = destination == currentScreen.destination,
                             onClick = { select(destination) },
                             icon = {
                                 Icon(
@@ -262,18 +371,43 @@ fun App() {
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
-                    when (currentRoute) {
-                        Route.WORKOUT_LOG ->
-                            WorkoutLogScreen(onManageMuscles = { push(Route.MUSCLE_CATALOG) })
+                    when (currentScreen) {
+                        Screen.WorkoutLog -> WorkoutLogScreen(
+                            onManageMuscles = { push(Screen.MuscleCatalog) },
+                            onOpenEntry = { activityId, epochDay, existing ->
+                                push(Screen.LogEntry(activityId, epochDay, existing))
+                            },
+                        )
 
-                        Route.MUSCLE_CATALOG -> MuscleCatalogScreen()
+                        // A strength log writes as it is filled in, so this leaves by
+                        // the back arrow with nothing to commit; a distance log leaves
+                        // when it is saved. Both land back on the day's list.
+                        is Screen.LogEntry -> WorkoutEntryScreen(
+                            activityId = currentScreen.activityId,
+                            epochDay = currentScreen.epochDay,
+                            onDone = { pop() },
+                        )
 
-                        Route.ACTIVITY_LIST ->
-                            ActivityListScreen(onManageCategories = { push(Route.ACTIVITY_CATEGORIES) })
+                        Screen.MuscleCatalog -> MuscleCatalogScreen()
 
-                        Route.ACTIVITY_CATEGORIES -> ActivityCategoryScreen()
+                        Screen.ActivityList ->
+                            ActivityListScreen(onManageCategories = { push(Screen.ActivityCategories) })
 
-                        Route.BODY_WEIGHT -> BodyWeightScreen()
+                        Screen.ActivityCategories -> ActivityCategoryScreen()
+
+                        Screen.BodyWeight -> BodyWeightScreen(
+                            onOpenEntry = { epochDay, existing ->
+                                push(Screen.BodyWeightEntry(epochDay, existing))
+                            },
+                        )
+
+                        // Saving is the end of the screen, so it leaves the same way
+                        // the back arrow would: there is one way off it, and the list
+                        // behind is already showing what was written.
+                        is Screen.BodyWeightEntry -> BodyWeightEntryScreen(
+                            epochDay = currentScreen.epochDay,
+                            onDone = { pop() },
+                        )
                     }
                 }
             }

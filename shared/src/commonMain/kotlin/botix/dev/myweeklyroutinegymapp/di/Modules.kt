@@ -13,6 +13,7 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateCategoryUse
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivitiesUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveActivityPickerUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoriesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoryUsageUseCase
@@ -53,13 +54,16 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetMuscleSetsUseCa
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleCatalogViewModel
+import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogViewModel
 import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.factoryOf
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
@@ -106,6 +110,7 @@ val domainModule = module {
     // Activity catalogue
     factoryOf(::ObserveActivitiesUseCase)
     factoryOf(::ObserveActivityPickerUseCase)
+    factoryOf(::ObserveActivityUseCase)
     factoryOf(::CreateActivityUseCase)
     factoryOf(::UpdateActivityUseCase)
     factoryOf(::ArchiveActivityUseCase)
@@ -167,6 +172,31 @@ val viewModelModule = module {
     viewModelOf(::ActivityListViewModel)
     viewModelOf(::ActivityCategoryViewModel)
     viewModelOf(::BodyWeightViewModel)
+    // The two that take runtime arguments — the day being edited, and the (activity,
+    // day) pair being logged. Written long-hand because `viewModelOf` binds every
+    // constructor parameter from the graph, and the leading ones here come from the
+    // caller instead.
+    viewModel { params -> BodyWeightEntryViewModel(params.get(), get(), get(), get()) }
+    // Destructured, not two `get()` calls: ParametersHolder.get() resolves by type
+    // and would hand back the same first Long twice, quietly logging every entry
+    // against day = activityId.
+    viewModel { (activityId: Long, epochDay: Long) ->
+        WorkoutEntryViewModel(
+            activityId = activityId,
+            epochDay = epochDay,
+            observeActivity = get(),
+            startOrResumeSession = get(),
+            logMuscleSets = get(),
+            setMuscleSets = get(),
+            removeMuscle = get(),
+            observeSessionDetail = get(),
+            observeMusclePicker = get(),
+            observeActivityMuscleSections = get(),
+            observeUntrained = get(),
+            observeDayLog = get(),
+            logDistanceTime = get(),
+        )
+    }
     viewModelOf(::WorkoutLogViewModel)
     viewModelOf(::MuscleCatalogViewModel)
 }

@@ -118,6 +118,7 @@
 
     <string name="log_title">Registra allenamento</string>
     <string name="log_new">Nuovo diario</string>
+    <string name="log_edit">Modifica diario</string>
     <string name="log_nothing_today">Niente registrato oggi.</string>
     <string name="log_nothing_day">Niente registrato in questo giorno.</string>
     <string name="log_hint_no_activities">Crea prima un\'attività di forza nella scheda Attività.</string>
@@ -139,7 +140,6 @@
     <string name="log_msg_removed">Rimosso.</string>
     <string name="log_msg_invalid_sets">Un muscolo selezionato richiede almeno una serie effettiva.</string>
     <string name="log_msg_activity_missing">Quell\'attività non esiste più.</string>
-    <string name="log_msg_not_strength">Questo modulo vale solo per le attività di forza.</string>
     <string name="log_distance_km">Distanza (km)</string>
     <string name="log_duration_min">Durata (min)</string>
     <string name="log_distance_time_title">Registra %1$s</string>
@@ -169,7 +169,12 @@
     <string name="weight_mode_daily">giornaliera</string>
     <string name="weight_mode_monthly">mensile</string>
     <string name="weight_preset_days">%1$sg</string>
-    <string name="weight_input_label">kg del %1$s</string>
+    <string name="weight_input_label">Peso (kg)</string>
+    <string name="weight_note_label">Nota (facoltativa)</string>
+    <string name="weight_entry_new">Nuova misura</string>
+    <string name="weight_entry_edit">Modifica misura</string>
+    <string name="weight_delete_title">Eliminare questa misura?</string>
+    <string name="weight_delete_text">%1$s kg del %2$s verranno eliminati.</string>
     <string name="weight_log">Registra</string>
     <string name="weight_replace">Sostituisci</string>
     <string name="weight_future">Quel giorno non è ancora arrivato.</string>
