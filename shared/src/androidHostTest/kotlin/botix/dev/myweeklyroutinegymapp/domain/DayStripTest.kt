@@ -1,7 +1,7 @@
 package botix.dev.myweeklyroutinegymapp.domain
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
+import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.MuscleCatalogRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.db.GymDatabase
@@ -9,9 +9,10 @@ import botix.dev.myweeklyroutinegymapp.db.createDatabase
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.DeleteSessionUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveDayLogUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveDayMusclesUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveSessionDaysUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveUntrainedMusclesUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartSessionUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.common.weekStartOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -19,6 +20,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -50,7 +52,7 @@ class DayStripTest {
     private fun workouts(db: GymDatabase) = WorkoutRepositoryImpl(db, dispatcher)
 
     private suspend fun seedActivity(db: GymDatabase, name: String = "Gym"): Long =
-        ActivityRepositoryImpl(db, dispatcher).create(name, MeasurementType.STRENGTH, createdAt = 0L)
+        ActivityCategoryRepositoryImpl(db, dispatcher).create(name, MeasurementType.STRENGTH, createdAt = 0L)
 
     @Test
     fun aWeekStartsOnTheMondayContainingTheDay() {
@@ -95,17 +97,17 @@ class DayStripTest {
         val upper = catalog.createMuscle(chest, "Upper chest", 0L)
         val lower = catalog.createMuscle(chest, "Lower chest", 0L)
 
-        val morning = workouts(database).startOrResumeSession(gym, today, 1L)
+        val morning = workouts(database).startSession(gym, today, 1L)
         workouts(database).addSets(morning, upper, 3, 1)
         workouts(database).addSets(morning, lower, 2, 0)
-        val evening = workouts(database).startOrResumeSession(other, today, 2L)
+        val evening = workouts(database).startSession(other, today, 2L)
         workouts(database).addSets(evening, upper, 4, 0)
 
         val log = ObserveDayLogUseCase(workouts(database))(today).first()
 
         // A day can hold more than one session — the single "current session" the
         // screen used to assume could not express this at all.
-        assertEquals(listOf("Gym", "Calisthenics"), log.map { it.activityName })
+        assertEquals(listOf("Gym", "Calisthenics"), log.map { it.categoryName })
         val first = log.first()
         assertEquals(5L, first.effectiveSets)
         assertEquals(1L, first.warmupSets)
@@ -113,10 +115,52 @@ class DayStripTest {
     }
 
     @Test
+    fun theDayMusclesNameWhatEachLogWorked() = runTest(dispatcher) {
+        val database = db()
+        val gym = seedActivity(database, "Gym")
+        val catalog = MuscleCatalogRepositoryImpl(database, dispatcher)
+        val chest = catalog.createGroup("Chest", 0L)
+        val upper = catalog.createMuscle(chest, "Upper chest", 0L)
+        val lower = catalog.createMuscle(chest, "Lower chest", 0L)
+
+        val morning = workouts(database).startSession(gym, today, 1L)
+        workouts(database).addSets(morning, upper, 3, 1)
+        workouts(database).addSets(morning, lower, 2, 0)
+        // A second Gym log on the same day, and an empty one.
+        val evening = workouts(database).startSession(gym, today, 2L)
+        workouts(database).addSets(evening, upper, 4, 0)
+        val abandoned = workouts(database).startSession(gym, today, 3L)
+
+        val muscles = ObserveDayMusclesUseCase(workouts(database))(today).first()
+
+        // The names are what the day card lists, and with no name on a session they
+        // are the only thing telling these three Gym logs apart.
+        assertEquals(listOf("Lower chest", "Upper chest"), muscles[morning])
+        assertEquals(listOf("Upper chest"), muscles[evening])
+        // Absent rather than empty: the card renders "nothing checked yet" for this
+        // one, which is a different line, not an empty row of pills.
+        assertNull(muscles[abandoned])
+    }
+
+    @Test
+    fun theDayMusclesIgnoreOtherDays() = runTest(dispatcher) {
+        val database = db()
+        val gym = seedActivity(database, "Gym")
+        val catalog = MuscleCatalogRepositoryImpl(database, dispatcher)
+        val chest = catalog.createGroup("Chest", 0L)
+        val upper = catalog.createMuscle(chest, "Upper chest", 0L)
+
+        val yesterday = workouts(database).startSession(gym, today - 1, 0L)
+        workouts(database).addSets(yesterday, upper, 3, 0)
+
+        assertTrue(ObserveDayMusclesUseCase(workouts(database))(today).first().isEmpty())
+    }
+
+    @Test
     fun theDayLogKeepsASessionWithNothingCheckedInIt() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
-        workouts(database).startOrResumeSession(activityId, today, 0L)
+        val categoryId = seedActivity(database)
+        workouts(database).startSession(categoryId, today, 0L)
 
         val log = ObserveDayLogUseCase(workouts(database))(today).first()
 
@@ -130,9 +174,9 @@ class DayStripTest {
     @Test
     fun theDayLogShowsOnlyTheSelectedDay() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
-        workouts(database).startOrResumeSession(activityId, today, 0L)
-        workouts(database).startOrResumeSession(activityId, today - 1, 0L)
+        val categoryId = seedActivity(database)
+        workouts(database).startSession(categoryId, today, 0L)
+        workouts(database).startSession(categoryId, today - 1, 0L)
 
         assertEquals(1, ObserveDayLogUseCase(workouts(database))(today).first().size)
         assertEquals(1, ObserveDayLogUseCase(workouts(database))(today - 1).first().size)
@@ -142,11 +186,11 @@ class DayStripTest {
     @Test
     fun deletingALogTakesItsEntriesWithIt() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
+        val categoryId = seedActivity(database)
         val catalog = MuscleCatalogRepositoryImpl(database, dispatcher)
         val chest = catalog.createGroup("Chest", 0L)
         val upper = catalog.createMuscle(chest, "Upper chest", 0L)
-        val sessionId = workouts(database).startOrResumeSession(activityId, today, 0L)
+        val sessionId = workouts(database).startSession(categoryId, today, 0L)
         workouts(database).addSets(sessionId, upper, 3, 0)
 
         DeleteSessionUseCase(workouts(database))(sessionId)
@@ -163,8 +207,8 @@ class DayStripTest {
         val database = db()
         val gym = seedActivity(database, "Gym")
         val other = seedActivity(database, "Calisthenics")
-        val keep = workouts(database).startOrResumeSession(gym, today, 1L)
-        val drop = workouts(database).startOrResumeSession(other, today, 2L)
+        val keep = workouts(database).startSession(gym, today, 1L)
+        val drop = workouts(database).startSession(other, today, 2L)
 
         DeleteSessionUseCase(workouts(database))(drop)
 
@@ -175,9 +219,9 @@ class DayStripTest {
     @Test
     fun sessionDaysMarksOnlyTheDaysActuallyTrained() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
-        workouts(database).startOrResumeSession(activityId, today, 0L)
-        workouts(database).startOrResumeSession(activityId, today - 2, 0L)
+        val categoryId = seedActivity(database)
+        workouts(database).startSession(categoryId, today, 0L)
+        workouts(database).startSession(categoryId, today - 2, 0L)
 
         val marked = ObserveSessionDaysUseCase(workouts(database))(today - 3, today + 3).first()
 
@@ -187,9 +231,9 @@ class DayStripTest {
     @Test
     fun sessionDaysIgnoresSessionsOutsideTheVisibleWindow() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
-        workouts(database).startOrResumeSession(activityId, today, 0L)
-        workouts(database).startOrResumeSession(activityId, today - 40, 0L)
+        val categoryId = seedActivity(database)
+        workouts(database).startSession(categoryId, today, 0L)
+        workouts(database).startSession(categoryId, today - 40, 0L)
 
         // The query follows the strip, so a session well outside it must not light up
         // a cell that happens to share a column position.
@@ -201,8 +245,8 @@ class DayStripTest {
         val database = db()
         val gym = seedActivity(database, "Gym")
         val other = seedActivity(database, "Calisthenics")
-        workouts(database).startOrResumeSession(gym, today, 0L)
-        workouts(database).startOrResumeSession(other, today - 1, 0L)
+        workouts(database).startSession(gym, today, 0L)
+        workouts(database).startSession(other, today - 1, 0L)
 
         // The marker answers "did I train that day", which is the question you are
         // asking while scanning the strip for a day to open.
@@ -212,7 +256,7 @@ class DayStripTest {
     @Test
     fun untrainedMusclesFollowTheDayBeingViewedNotToday() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
+        val categoryId = seedActivity(database)
         val catalog = MuscleCatalogRepositoryImpl(database, dispatcher)
         val chest = catalog.createGroup("Chest", 0L)
         val upper = catalog.createMuscle(chest, "Upper chest", 0L)
@@ -220,7 +264,7 @@ class DayStripTest {
 
         // Trained 20 days ago: outside a window ending today, inside one ending then.
         val longAgo = today - 20
-        val sessionId = workouts(database).startOrResumeSession(activityId, longAgo, 0L)
+        val sessionId = workouts(database).startSession(categoryId, longAgo, 0L)
         workouts(database).addSets(sessionId, upper, 3, 0)
 
         val useCase = ObserveUntrainedMusclesUseCase(workouts(database), FixedClock(today))
@@ -240,14 +284,14 @@ class DayStripTest {
     @Test
     fun startingASessionUsesTheDayItWasGivenNotToday() = runTest(dispatcher) {
         val database = db()
-        val activityId = seedActivity(database)
+        val categoryId = seedActivity(database)
         val past = today - 2
 
-        StartOrResumeSessionUseCase(
+        StartSessionUseCase(
             workouts(database),
-            ActivityRepositoryImpl(database, dispatcher),
+            ActivityCategoryRepositoryImpl(database, dispatcher),
             FixedClock(today),
-        )(activityId, past)
+        )(categoryId, past)
 
         val sessions = workouts(database).observeSessionsInRange(past - 5, today).first()
         assertEquals(listOf(past), sessions.map { it.epochDay })

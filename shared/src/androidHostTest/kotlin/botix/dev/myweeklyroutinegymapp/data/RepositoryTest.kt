@@ -1,7 +1,7 @@
 package botix.dev.myweeklyroutinegymapp.data
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
+import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.BodyWeightRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.MuscleCatalogRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
@@ -9,7 +9,6 @@ import botix.dev.myweeklyroutinegymapp.db.GymDatabase
 import botix.dev.myweeklyroutinegymapp.db.createDatabase
 import botix.dev.myweeklyroutinegymapp.domain.model.DeleteOutcome
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
-import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementTypeChange
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -35,111 +34,44 @@ class RepositoryTest {
         return createDatabase(driver)
     }
 
-    private fun activities(db: GymDatabase) = ActivityRepositoryImpl(db, dispatcher)
+    private fun categories(db: GymDatabase) = ActivityCategoryRepositoryImpl(db, dispatcher)
     private fun muscles(db: GymDatabase) = MuscleCatalogRepositoryImpl(db, dispatcher)
     private fun workouts(db: GymDatabase) = WorkoutRepositoryImpl(db, dispatcher)
     private fun bodyWeight(db: GymDatabase) = BodyWeightRepositoryImpl(db, dispatcher)
 
-    /** Seeds a strength activity with one group and one leaf; returns activity to muscle id. */
+    /** Seeds a strength category with one group and one leaf; returns category to muscle id. */
     private suspend fun seedStrength(db: GymDatabase): Pair<Long, Long> {
-        val activityId = activities(db).create("Gym", MeasurementType.STRENGTH, createdAt = 0L)
+        val categoryId = categories(db).create("Gym", MeasurementType.STRENGTH, createdAt = 0L)
         val groupId = muscles(db).createGroup("Chest", 0L)
         val muscleId = muscles(db).createMuscle(groupId, "Upper chest", 0L)
-        return activityId to muscleId
+        return categoryId to muscleId
     }
 
     @Test
-    fun activityMapsToDomainWithItsEnum() = runTest(dispatcher) {
-        val repo = activities(db())
-        val id = repo.create("Running", MeasurementType.DISTANCE_TIME, icon = "run", createdAt = 7L)
-
-        val stored = repo.getById(id)!!
-        assertEquals("Running", stored.name)
-        assertEquals(MeasurementType.DISTANCE_TIME, stored.measurementType)
-        assertEquals("run", stored.icon)
-        assertNull(stored.color)
-        assertEquals(false, stored.isArchived)
-        assertEquals(7L, stored.createdAt)
-    }
-
-    @Test
-    fun observedListReEmitsAfterAWrite() = runTest(dispatcher) {
-        val repo = activities(db())
-        assertTrue(repo.observeActive().first().isEmpty())
-
-        repo.create("Gym", MeasurementType.STRENGTH, createdAt = 0L)
-
-        // The point of the Flow: no manual invalidation between write and read.
-        assertEquals(listOf("Gym"), repo.observeActive().first().map { it.name })
-    }
-
-    @Test
-    fun archivingRemovesFromActiveButKeepsTheRow() = runTest(dispatcher) {
-        val repo = activities(db())
-        val id = repo.create("Gym", MeasurementType.STRENGTH, createdAt = 0L)
-
-        repo.setArchived(id, true)
-
-        assertTrue(repo.observeActive().first().isEmpty())
-        assertEquals(1, repo.observeArchived().first().size)
-        assertEquals(1, repo.observeAll().first().size)
-    }
-
-    @Test
-    fun deleteIsBlockedOnceTheActivityHasSessions() = runTest(dispatcher) {
+    fun startingTwiceOnOneDayMakesTwoLogs() = runTest(dispatcher) {
         val database = db()
-        val (activityId, _) = seedStrength(database)
-        val repo = activities(database)
-
-        val spare = repo.create("Spare", MeasurementType.SIMPLE, createdAt = 0L)
-        assertIs<DeleteOutcome.Deleted>(repo.delete(spare))
-
-        workouts(database).startOrResumeSession(activityId, epochDay = 20_000L, createdAt = 0L)
-
-        val blocked = repo.delete(activityId)
-        assertIs<DeleteOutcome.BlockedByHistory>(blocked)
-        assertEquals(1L, blocked.referenceCount)
-        assertEquals(1, repo.observeAll().first().size)
-    }
-
-    @Test
-    fun measurementTypeLocksAfterTheFirstSession() = runTest(dispatcher) {
-        val database = db()
-        val (activityId, _) = seedStrength(database)
-        val repo = activities(database)
-
-        assertIs<MeasurementTypeChange.Changed>(
-            repo.changeMeasurementType(activityId, MeasurementType.SIMPLE),
-        )
-
-        workouts(database).startOrResumeSession(activityId, epochDay = 20_000L, createdAt = 0L)
-
-        val blocked = repo.changeMeasurementType(activityId, MeasurementType.DISTANCE_TIME)
-        assertIs<MeasurementTypeChange.BlockedByHistory>(blocked)
-        assertEquals(MeasurementType.SIMPLE, repo.getById(activityId)!!.measurementType)
-    }
-
-    @Test
-    fun startOrResumeReturnsTheSameSessionForTheSameDay() = runTest(dispatcher) {
-        val database = db()
-        val (activityId, _) = seedStrength(database)
+        val (categoryId, _) = seedStrength(database)
         val repo = workouts(database)
 
-        val first = repo.startOrResumeSession(activityId, 20_000L, 0L)
-        val second = repo.startOrResumeSession(activityId, 20_000L, 0L)
-        val otherDay = repo.startOrResumeSession(activityId, 20_001L, 0L)
+        val first = repo.startSession(categoryId, 20_000L, 0L)
+        val second = repo.startSession(categoryId, 20_000L, 0L)
+        val otherDay = repo.startSession(categoryId, 20_001L, 0L)
 
-        assertEquals(first, second)
+        // It used to find-or-resume by (activity, day), so the first two would have
+        // been the same row. A day holds as many logs of a kind as were recorded now —
+        // a morning session and an evening one are two things that happened — and they
+        // are told apart by what is in them rather than by a name.
+        assertTrue(first != second)
         assertTrue(otherDay != first)
-        assertEquals(2, repo.observeSessionsInRange(19_000L, 21_000L).first().size)
+        assertEquals(3, repo.observeSessionsInRange(19_000L, 21_000L).first().size)
     }
 
     @Test
     fun addSetsSumsInsteadOfCreatingASecondEntry() = runTest(dispatcher) {
         val database = db()
-        val (activityId, muscleId) = seedStrength(database)
+        val (categoryId, muscleId) = seedStrength(database)
         val repo = workouts(database)
-        val sessionId = repo.startOrResumeSession(activityId, 20_000L, 0L)
+        val sessionId = repo.startSession(categoryId, 20_000L, 0L)
 
         repo.addSets(sessionId, muscleId, effectiveSets = 3, warmupSets = 1)
         repo.addSets(sessionId, muscleId, effectiveSets = 2, warmupSets = 1)
@@ -159,9 +91,9 @@ class RepositoryTest {
     @Test
     fun setSetsOverwritesWhereAddSetsAccumulates() = runTest(dispatcher) {
         val database = db()
-        val (activityId, muscleId) = seedStrength(database)
+        val (categoryId, muscleId) = seedStrength(database)
         val repo = workouts(database)
-        val sessionId = repo.startOrResumeSession(activityId, 20_000L, 0L)
+        val sessionId = repo.startSession(categoryId, 20_000L, 0L)
 
         repo.addSets(sessionId, muscleId, 3, 0)
         repo.setSets(sessionId, muscleId, 2, 1)
@@ -172,9 +104,9 @@ class RepositoryTest {
     @Test
     fun uncheckingAMuscleRemovesItsEntry() = runTest(dispatcher) {
         val database = db()
-        val (activityId, muscleId) = seedStrength(database)
+        val (categoryId, muscleId) = seedStrength(database)
         val repo = workouts(database)
-        val sessionId = repo.startOrResumeSession(activityId, 20_000L, 0L)
+        val sessionId = repo.startSession(categoryId, 20_000L, 0L)
 
         repo.addSets(sessionId, muscleId, 3, 0)
         repo.removeMuscle(sessionId, muscleId)
@@ -187,7 +119,7 @@ class RepositoryTest {
     @Test
     fun groupVolumeAggregatesLeavesAndUntrainedSurfacesTheRest() = runTest(dispatcher) {
         val database = db()
-        val (activityId, upperChest) = seedStrength(database)
+        val (categoryId, upperChest) = seedStrength(database)
         val catalog = muscles(database)
         val chestId = catalog.observeActiveGroups().first().single().id
         val general = catalog.createMuscle(chestId, "General", 0L)
@@ -195,7 +127,7 @@ class RepositoryTest {
         catalog.createMuscle(legs, "Quads", 0L)
 
         val repo = workouts(database)
-        val sessionId = repo.startOrResumeSession(activityId, 20_000L, 0L)
+        val sessionId = repo.startSession(categoryId, 20_000L, 0L)
         repo.addSets(sessionId, upperChest, 3, 0)
         repo.addSets(sessionId, general, 2, 0)
 
@@ -211,10 +143,10 @@ class RepositoryTest {
     @Test
     fun muscleDeletionIsBlockedByHistoryButArchivingIsNot() = runTest(dispatcher) {
         val database = db()
-        val (activityId, muscleId) = seedStrength(database)
+        val (categoryId, muscleId) = seedStrength(database)
         val catalog = muscles(database)
         val repo = workouts(database)
-        val sessionId = repo.startOrResumeSession(activityId, 20_000L, 0L)
+        val sessionId = repo.startSession(categoryId, 20_000L, 0L)
         repo.addSets(sessionId, muscleId, 3, 0)
 
         assertIs<DeleteOutcome.BlockedByHistory>(catalog.deleteMuscle(muscleId))

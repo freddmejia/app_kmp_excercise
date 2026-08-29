@@ -1,0 +1,101 @@
+-- Schema 5 -> 6: the category decides how a session is measured.
+--
+-- ### What changed, and why it reverses an earlier decision
+-- `ActivityCategory.sq` used to say, at length, that a category is "deliberately NOT
+-- a second measurement_type" — free-form organisation that constrains no form and
+-- feeds no metric. That was coherent, and it is what made "create an activity" feel
+-- like paperwork: the user had to name a thing, classify how it is measured, file it
+-- under a label, and only then log it, with the label and the measurement saying
+-- almost the same thing twice.
+--
+-- A category is now the *kind* of training: Gym is sets and muscles, Swim and Bicycle
+-- are distance and time. Picking one is how you say what you did, and the logging
+-- form follows from it with nothing left to ask.
+--
+-- ### `activity.measurement_type` stays
+-- The category decides the type when an activity is created or refiled; the activity
+-- records it. Two reasons not to drop the column and read through the category:
+-- an activity may have no category (a normal state — `category_id` is nullable and
+-- `ON DELETE SET NULL` produces it), and every session already logged was logged
+-- under the activity's own type, so keeping it is what stops a category edit from
+-- reinterpreting history.
+--
+-- ### Existing categories inherit, and a mixed one splits
+-- Each category takes the measurement of the activities inside it. A category holding
+-- both kinds cannot inherit one without lying about the other, so the minority kind
+-- moves to a copy of the category. Nothing is deleted, no session is touched, and no
+-- activity changes its own measurement type.
+--
+-- Mirrors ActivityCategory.sq exactly. The two must agree: a fresh install runs
+-- Schema.create() and never touches this file, so any drift only ever breaks for
+-- users who upgrade.
+
+ALTER TABLE activity_category ADD COLUMN measurement_type TEXT NOT NULL DEFAULT 'STRENGTH';
+
+-- Same seed mechanism as the muscle catalogue (see 4.sqm): a key on rows the app
+-- shipped, null on rows the user made and null again once they rename one, plus a
+-- ledger so a category the user deletes is not put back on the next launch.
+ALTER TABLE activity_category ADD COLUMN seed_key TEXT;
+
+CREATE UNIQUE INDEX activity_category_seed_key_unique ON activity_category(seed_key)
+    WHERE seed_key IS NOT NULL;
+
+CREATE TABLE category_seed (
+    seed_key   TEXT NOT NULL PRIMARY KEY,
+    applied_at INTEGER NOT NULL
+);
+
+-- ---------- inherit ----------
+--
+-- The most common measurement among the category's activities, archived ones
+-- included: an archived activity still has history, and its category still has to be
+-- a place that history can live. Ties break on the type name so the result does not
+-- depend on row order. An empty category has nothing to inherit and keeps the
+-- column's default.
+UPDATE activity_category SET measurement_type = COALESCE(
+    (
+        SELECT a.measurement_type FROM activity a
+        WHERE a.category_id = activity_category.id
+        GROUP BY a.measurement_type
+        ORDER BY COUNT(*) DESC, a.measurement_type ASC
+        LIMIT 1
+    ),
+    'STRENGTH'
+);
+
+-- ---------- split ----------
+--
+-- One copy per (category, leftover type) pair, carrying the original's icon, colour
+-- and archived flag so the copy is the same label with a different contract.
+--
+-- The suffix is the raw enum name rather than a readable phrase because a migration
+-- cannot resolve a string resource — there is no locale here, and hard-coding an
+-- English word would be worse than an obviously mechanical one. It is a rename
+-- prompt, and it only appears for a category that genuinely held both kinds.
+--
+-- OR IGNORE guards the one collision that would otherwise abort the upgrade and take
+-- the app down on launch: a category already named exactly "X · STRENGTH". When it
+-- fires, the reassignment below finds no compatible target and leaves those
+-- activities uncategorised, which is a state the app already handles.
+INSERT OR IGNORE INTO activity_category (name, icon, color, is_archived, created_at, measurement_type)
+SELECT c.name || ' · ' || a.measurement_type, c.icon, c.color, c.is_archived, c.created_at,
+       a.measurement_type
+FROM activity_category c
+JOIN activity a ON a.category_id = c.id
+WHERE a.measurement_type != c.measurement_type
+GROUP BY c.id, a.measurement_type;
+
+-- Move the leftovers into their copy. The WHERE reads the row as it was, so
+-- `category_id` still points at the original while the subquery builds the copy's
+-- name from it. A NULL result — the OR IGNORE case above — uncategorises the
+-- activity rather than pointing it at a category that measures something else.
+UPDATE activity SET category_id = (
+    SELECT nc.id FROM activity_category nc
+    WHERE nc.name = (SELECT c.name FROM activity_category c WHERE c.id = activity.category_id)
+                    || ' · ' || activity.measurement_type
+      AND nc.measurement_type = activity.measurement_type
+)
+WHERE category_id IS NOT NULL
+  AND measurement_type != (
+      SELECT c.measurement_type FROM activity_category c WHERE c.id = activity.category_id
+  );

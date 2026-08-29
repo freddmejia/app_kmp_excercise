@@ -1,0 +1,146 @@
+-- Schema 6 -> 7: the log is the record. Activities are gone.
+--
+-- ### What this removes, and why
+-- An `activity` was a named, reusable thing you created before you could log it:
+-- "chest day", "morning ride". Yesterday's rework already stopped making you visit a
+-- separate tab to create one, but the concept survived — the log flow still asked for
+-- a name, and the catalogue still had a screen.
+--
+-- It was one noun too many. A session already carries everything the name was
+-- standing in for: the day it happened, the kind of training it was, and the muscles
+-- worked with their sets. "chest day" is not a thing you own — it is a description of
+-- one Tuesday, and the muscles under it say it better than a label you have to
+-- remember to reuse.
+--
+-- So a session points at a **category** and nothing else. Logging is: press New log,
+-- pick the kind of training, tick muscles. There is no catalogue to fill in first,
+-- and nothing to name.
+--
+-- ### `category_id` is nullable, and no row is invented
+-- A session whose activity had a category takes that category. One whose activity had
+-- none is matched by measurement type to a category that measures the same thing,
+-- preferring a shipped one. If there is no such category — every candidate deleted —
+-- the session keeps its sets and its day with no category, which the log screen
+-- renders with a fallback label.
+--
+-- Deliberately no INSERT of a missing "Gym" here: the seed ledger (4.sqm, 5.sqm) says
+-- a shipped row the user deleted stays deleted, and a migration that quietly puts one
+-- back to have somewhere to point would break that rule at the worst moment.
+--
+-- Activity *names* are dropped rather than preserved into `notes`. That was the
+-- user's call: they were test data, and a note is not a name.
+--
+-- ### The table rebuild, and the order it has to happen in
+-- `workout_session.activity_id` is `NOT NULL REFERENCES activity(id)`, so it has to
+-- go before `activity` can be dropped — and `ALTER TABLE ... DROP COLUMN` needs
+-- SQLite 3.35 while minSdk 24 can be as old as 3.9. That means the classic rebuild,
+-- and the rebuild has to be safe under two conditions this project cannot control
+-- together:
+--
+--   * **Foreign keys may be ON.** The iOS driver sets `foreignKeyConstraints = true`.
+--     With enforcement on, `DROP TABLE` performs an implicit `DELETE FROM` first — so
+--     dropping `workout_session` while `session_muscle` still references it would
+--     cascade and silently delete every set ever logged.
+--   * **`ALTER TABLE ... RENAME` behaves differently by version.** Since 3.25 it
+--     rewrites references to the renamed table in other tables' schemas; before that
+--     it does not.
+--
+-- The order below is correct under both. `session_muscle` is parked in a table with
+-- **no foreign key at all**, so that when the drops happen nothing references
+-- anything, and both renames are of tables that nothing points at.
+--
+-- Mirrors WorkoutSession.sq exactly. The two must agree: a fresh install runs
+-- Schema.create() and never touches this file, so any drift only ever breaks for
+-- users who upgrade.
+
+-- ---------- 1. the session table, rebuilt around the category ----------
+
+CREATE TABLE workout_session_new (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_id      INTEGER REFERENCES activity_category(id) ON DELETE SET NULL,
+    date_epoch_day   INTEGER NOT NULL,
+    notes            TEXT,
+    created_at       INTEGER NOT NULL,
+    distance_meters  INTEGER,
+    duration_seconds INTEGER
+);
+
+-- Ids are preserved, which is what lets session_muscle be copied across unchanged.
+INSERT INTO workout_session_new (
+    id, category_id, date_epoch_day, notes, created_at, distance_meters, duration_seconds
+)
+SELECT ws.id,
+       COALESCE(
+           -- What the activity was filed under, if anything.
+           (SELECT a.category_id FROM activity a WHERE a.id = ws.activity_id),
+           -- Otherwise a category that measures the same thing. A shipped one wins:
+           -- `seed_key IS NULL` sorts 0 before 1, so seeded rows come first, and the
+           -- id breaks any remaining tie so the result does not depend on row order.
+           (SELECT c.id FROM activity_category c
+            WHERE c.is_archived = 0
+              AND c.measurement_type = (
+                  SELECT a2.measurement_type FROM activity a2 WHERE a2.id = ws.activity_id
+              )
+            ORDER BY (c.seed_key IS NULL), c.id
+            LIMIT 1)
+       ),
+       ws.date_epoch_day, ws.notes, ws.created_at, ws.distance_meters, ws.duration_seconds
+FROM workout_session ws;
+
+-- ---------- 2. park the entries with no foreign key ----------
+
+CREATE TABLE session_muscle_tmp (
+    id             INTEGER,
+    session_id     INTEGER,
+    muscle_id      INTEGER,
+    effective_sets INTEGER,
+    warmup_sets    INTEGER
+);
+
+INSERT INTO session_muscle_tmp (id, session_id, muscle_id, effective_sets, warmup_sets)
+SELECT id, session_id, muscle_id, effective_sets, warmup_sets FROM session_muscle;
+
+-- ---------- 3. drop, with nothing pointing at anything ----------
+
+-- Safe in this order and in no other: session_muscle goes first so that dropping
+-- workout_session has no children to cascade into, and session_muscle_tmp holds the
+-- rows meanwhile without a reference of its own.
+DROP TABLE session_muscle;
+
+DROP TABLE workout_session;
+
+ALTER TABLE workout_session_new RENAME TO workout_session;
+
+-- ---------- 4. rebuild the entries against it ----------
+
+CREATE TABLE session_muscle (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id     INTEGER NOT NULL REFERENCES workout_session(id) ON DELETE CASCADE,
+    muscle_id      INTEGER NOT NULL REFERENCES muscle(id),
+    effective_sets INTEGER NOT NULL CHECK (effective_sets >= 1),
+    warmup_sets    INTEGER NOT NULL DEFAULT 0 CHECK (warmup_sets >= 0),
+    UNIQUE (session_id, muscle_id)
+);
+
+INSERT INTO session_muscle (id, session_id, muscle_id, effective_sets, warmup_sets)
+SELECT id, session_id, muscle_id, effective_sets, warmup_sets FROM session_muscle_tmp;
+
+DROP TABLE session_muscle_tmp;
+
+-- ---------- 5. indexes, which went with the tables that held them ----------
+
+CREATE INDEX workout_session_date_idx ON workout_session(date_epoch_day);
+
+CREATE INDEX workout_session_category_idx ON workout_session(category_id);
+
+CREATE INDEX session_muscle_session_idx ON session_muscle(session_id);
+
+CREATE INDEX session_muscle_muscle_idx ON session_muscle(muscle_id);
+
+-- ---------- 6. the activity catalogue itself ----------
+
+-- The link table first: it references both `activity` and `muscle`, so dropping it
+-- ahead of `activity` keeps step order the same as everywhere above.
+DROP TABLE activity_muscle;
+
+DROP TABLE activity;

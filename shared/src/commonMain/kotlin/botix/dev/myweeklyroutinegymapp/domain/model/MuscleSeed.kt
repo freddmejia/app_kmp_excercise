@@ -36,3 +36,27 @@ data class SeedSyncResult(
 ) {
     val changedAnything: Boolean get() = groupsAdded > 0 || musclesAdded > 0 || namesUpdated > 0
 }
+
+/**
+ * A category the app ships, with its name already resolved into the device's
+ * language. Same two-names rule as [SeededGroup]: [key] identifies the row forever,
+ * [name] is text for a human and is expected to change under it.
+ *
+ * [measurementType] is not translated and never changes — it is the contract the
+ * category exists to carry, and a shipped category that changed how it measures would
+ * reinterpret every session logged under it.
+ */
+data class SeededCategory(
+    val key: String,
+    val name: String,
+    val measurementType: MeasurementType,
+    val icon: String? = null,
+)
+
+/** What [SeededCategory] syncing did. Flat, because categories have no leaves. */
+data class CategorySeedSyncResult(
+    val categoriesAdded: Int = 0,
+    val namesUpdated: Int = 0,
+) {
+    val changedAnything: Boolean get() = categoriesAdded > 0 || namesUpdated > 0
+}

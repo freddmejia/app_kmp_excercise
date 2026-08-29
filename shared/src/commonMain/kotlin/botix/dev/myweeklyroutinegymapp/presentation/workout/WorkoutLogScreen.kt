@@ -16,10 +16,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,7 +34,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import botix.dev.myweeklyroutinegymapp.domain.model.Activity
+import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategory
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
@@ -42,8 +46,9 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.formatMeasure
 import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
 import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
-import botix.dev.myweeklyroutinegymapp.presentation.preview.previewActivities
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewCategories
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDayLog
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDayMuscles
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDaysWithSessions
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import myweeklyroutinegymapp.shared.generated.resources.Res
@@ -52,17 +57,20 @@ import myweeklyroutinegymapp.shared.generated.resources.common_delete
 import myweeklyroutinegymapp.shared.generated.resources.common_deleted
 import myweeklyroutinegymapp.shared.generated.resources.log_delete_count
 import myweeklyroutinegymapp.shared.generated.resources.log_delete_empty
+import myweeklyroutinegymapp.shared.generated.resources.log_delete_measures
 import myweeklyroutinegymapp.shared.generated.resources.log_delete_title
 import myweeklyroutinegymapp.shared.generated.resources.log_distance_summary
 import myweeklyroutinegymapp.shared.generated.resources.log_hint_new_log
-import myweeklyroutinegymapp.shared.generated.resources.log_hint_no_activities
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_category_missing
 import myweeklyroutinegymapp.shared.generated.resources.log_new
-import myweeklyroutinegymapp.shared.generated.resources.log_no_activities_at_all
+import myweeklyroutinegymapp.shared.generated.resources.log_no_categories
 import myweeklyroutinegymapp.shared.generated.resources.log_nothing_checked
 import myweeklyroutinegymapp.shared.generated.resources.log_nothing_day
 import myweeklyroutinegymapp.shared.generated.resources.log_nothing_today
 import myweeklyroutinegymapp.shared.generated.resources.log_pace
+import myweeklyroutinegymapp.shared.generated.resources.log_pick_category
 import myweeklyroutinegymapp.shared.generated.resources.log_summary
+import myweeklyroutinegymapp.shared.generated.resources.log_uncategorised
 import myweeklyroutinegymapp.shared.generated.resources.plural_effective_sets
 import myweeklyroutinegymapp.shared.generated.resources.plural_muscles
 import org.jetbrains.compose.resources.pluralStringResource
@@ -80,15 +88,24 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun WorkoutLogScreen(
-    onOpenEntry: (activityId: Long, epochDay: Long, existing: Boolean) -> Unit,
+    onOpenEntry: (sessionId: Long, epochDay: Long, existing: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WorkoutLogViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // The log is created here and opened as `existing = false`, which is what makes
+    // the app bar say "New log" the moment the form appears rather than a frame later.
+    LaunchedEffect(Unit) {
+        viewModel.created.collect { sessionId ->
+            onOpenEntry(sessionId, state.selectedDay, false)
+        }
+    }
+
     WorkoutLogContent(
         state = state,
         onOpenEntry = onOpenEntry,
+        onNewLog = viewModel::startLog,
         onSelectDay = viewModel::selectDay,
         onDeleteLog = viewModel::deleteLog,
         onStepWeek = viewModel::stepWeek,
@@ -101,7 +118,9 @@ fun WorkoutLogScreen(
 @Composable
 fun WorkoutLogContent(
     state: WorkoutLogUiState,
-    onOpenEntry: (activityId: Long, epochDay: Long, existing: Boolean) -> Unit,
+    onOpenEntry: (sessionId: Long, epochDay: Long, existing: Boolean) -> Unit,
+    /** Starts a log of that kind on the selected day. The screen opens once it exists. */
+    onNewLog: (categoryId: Long) -> Unit,
     onSelectDay: (Long) -> Unit,
     onDeleteLog: (Long) -> Unit,
     onStepWeek: (Boolean) -> Unit,
@@ -167,23 +186,17 @@ fun WorkoutLogContent(
     }
 
     if (showNewLogDialog) {
-        NewLogDialog(
-            // Both kinds, in one list. Splitting them into two buttons would make the
-            // user classify the activity before choosing it, which is the app's job:
-            // the type is already recorded, and it decides which form opens next.
-            activities = state.strengthActivities + state.distanceActivities,
+        CategoryPickerDialog(
+            categories = state.categories,
             onDismiss = { showNewLogDialog = false },
-            onPick = { activity ->
+            onPick = { category ->
                 showNewLogDialog = false
-                // Whether this is a new log or a correction is something the day's
-                // list already knows — picking an activity that was logged today
-                // reopens that log rather than starting a second one, and the app bar
-                // has to say so before the screen appears rather than a frame later.
-                onOpenEntry(
-                    activity.id,
-                    state.selectedDay,
-                    state.dayLog.any { it.activityId == activity.id },
-                )
+                // The category is the whole question this dialog asks, and the only
+                // one asked before the form: it decides which form opens, and it is
+                // what the log is called afterwards. It used to list every activity in
+                // the app, which meant you could only log something you had already
+                // created on another tab.
+                onNewLog(category.id)
             },
         )
     }
@@ -212,8 +225,8 @@ private fun DayLog(
                 if (state.isToday) Res.string.log_nothing_today else Res.string.log_nothing_day,
             ),
             hint = stringResource(
-                if (state.strengthActivities.isEmpty()) {
-                    Res.string.log_hint_no_activities
+                if (state.categories.isEmpty()) {
+                    Res.string.log_no_categories
                 } else {
                     Res.string.log_hint_new_log
                 },
@@ -224,6 +237,7 @@ private fun DayLog(
 
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(state.dayLog, key = { it.sessionId }) { summary ->
+            val muscles = state.musclesBySession[summary.sessionId].orEmpty()
             // Swiping asks; the dialog below still decides. The row springs back
             // either way — see `SwipeToDelete`.
             SwipeToDelete(
@@ -236,11 +250,11 @@ private fun DayLog(
                 // says the same thing without claiming a tap of its own — tapping it
                 // is tapping the card, because it is inside it.
                 Card(
-                    // Both kinds of log open the same way. The row knows which
-                    // activity it belongs to, and the entry screen reads the
-                    // measurement type — so the list does not have to branch on a
-                    // type it would only have to keep in step.
-                    onClick = { onOpenEntry(summary.activityId, summary.epochDay, true) },
+                    // Both kinds of log open the same way. The row carries the
+                    // session id, and the entry screen reads the measurement type from
+                    // it — so the list does not have to branch on a type it would only
+                    // have to keep in step.
+                    onClick = { onOpenEntry(summary.sessionId, summary.epochDay, true) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -253,31 +267,55 @@ private fun DayLog(
                     ) {
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text(summary.activityName, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                // Three shapes of session, and each one gets the line
-                                // that describes it: a ride measured in km, a strength
-                                // session measured in sets, and one started but never
-                                // filled in — which says so rather than showing "0
-                                // sets", a number that reads like a logged result.
-                                when {
-                                    summary.isDistanceTime -> summary.distanceTimeLine()
-                                    summary.isEmpty -> stringResource(Res.string.log_nothing_checked)
-                                    else -> stringResource(
-                                        Res.string.log_summary,
-                                        summary.effectiveSets.toString(),
-                                        summary.warmupSets.toString(),
-                                        pluralStringResource(
-                                            Res.plurals.plural_muscles,
-                                            summary.muscleCount.toInt(),
-                                            summary.muscleCount.toString(),
-                                        ),
-                                    )
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                // Null once its category is deleted. The log still
+                                // happened, so it keeps its row and gets a name that
+                                // says what it now is.
+                                summary.categoryName
+                                    ?: stringResource(Res.string.log_uncategorised),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            // Three shapes of session, and each says what it is in the
+                            // terms it was measured in.
+                            //
+                            // The set counts are gone from here. "3 effective · 1
+                            // warmup · 2 muscles" was three numbers describing a
+                            // session it did not name, and the numbers are on the
+                            // screen you open next anyway. What a strength log needs
+                            // the list to say is *what was worked* — which is also the
+                            // only thing telling two Gym logs on one day apart, now
+                            // that neither carries a name.
+                            when {
+                                summary.isDistanceTime -> Text(
+                                    summary.distanceTimeLine(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+
+                                muscles.isEmpty() -> Text(
+                                    // Started and left. It says so rather than showing
+                                    // "0 sets", a number that reads like a result.
+                                    stringResource(Res.string.log_nothing_checked),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+
+                                else -> MusclePills(muscles)
+                            }
+                        }
+                        // Visible, because the swipe was not.
+                        //
+                        // Deleting was swipe-only, which is a gesture with nothing on
+                        // screen to suggest it exists — a log created by mistake read
+                        // as permanent. The swipe still works for anyone who knows it;
+                        // this is the half that can be found.
+                        IconButton(onClick = { confirmingDelete = summary }) {
+                            Icon(
+                                imageVector = GymIcons.Trash,
+                                contentDescription = stringResource(Res.string.common_delete),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Icon(
@@ -301,13 +339,23 @@ private fun DayLog(
             onDismissRequest = { confirmingDelete = null },
             title = { Text(stringResource(Res.string.log_delete_title)) },
             text = {
+                // Falls back for a log whose category was deleted: the dialog still
+                // has to name what it is about to destroy.
+                val name = summary.categoryName
+                    ?: stringResource(Res.string.log_uncategorised)
                 Text(
                     if (summary.isEmpty) {
-                        stringResource(Res.string.log_delete_empty, summary.activityName)
+                        stringResource(Res.string.log_delete_empty, name)
+                    } else if (summary.isDistanceTime) {
+                        // A ride has no sets and no muscles, so the strength wording
+                        // read "0 effective sets across 0 muscles will be removed" —
+                        // true, and a description of the wrong thing. Name what it
+                        // actually holds.
+                        stringResource(Res.string.log_delete_measures, name, summary.distanceTimeLine())
                     } else {
                         stringResource(
                             Res.string.log_delete_count,
-                            summary.activityName,
+                            name,
                             pluralStringResource(
                                 Res.plurals.plural_effective_sets,
                                 summary.effectiveSets.toInt(),
@@ -346,33 +394,43 @@ private fun DayLog(
  * which is why an activity created as distance-and-time could never be logged: it
  * simply never appeared here, and the screen offered no other way in.
  */
+/**
+ * Step one of logging: what kind of training was it.
+ *
+ * A dialog rather than a screen because it asks one question with a handful of
+ * answers and no state worth going back to — and because the app ships three
+ * categories, so this list is never empty on a fresh install the way the activity
+ * list it replaces always was.
+ */
 @Composable
-private fun NewLogDialog(
-    activities: List<Activity>,
+private fun CategoryPickerDialog(
+    categories: List<ActivityCategory>,
     onDismiss: () -> Unit,
-    onPick: (Activity) -> Unit,
+    onPick: (ActivityCategory) -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.log_new)) },
+        title = { Text(stringResource(Res.string.log_pick_category)) },
         text = {
-            if (activities.isEmpty()) {
-                Text(stringResource(Res.string.log_no_activities_at_all))
+            if (categories.isEmpty()) {
+                // Only reachable by deleting all three shipped categories, which the
+                // seed ledger then honours. Says where to get one back.
+                Text(stringResource(Res.string.log_no_categories))
             } else {
                 Column(
                     modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    activities.forEach { activity ->
+                    categories.forEach { category ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onPick(activity) }
+                                .clickable { onPick(category) }
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                listOfNotNull(activity.icon, activity.name).joinToString(" "),
+                                listOfNotNull(category.icon, category.name).joinToString(" "),
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                         }
@@ -386,6 +444,41 @@ private fun NewLogDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
         },
     )
+}
+
+/**
+ * What a strength log worked, one pill per muscle.
+ *
+ * A [FlowRow] because the count is unbounded — a session can touch a dozen muscles —
+ * and a single line would clip the ones that did not fit, which is the failure mode
+ * that once deleted a button from this screen entirely (2026-08-25 §6). Pills wrap to
+ * a second line instead.
+ *
+ * They are labels, not controls: tapping one does nothing a tap on the card does not
+ * already do, and making them clickable would put two targets where the row means one.
+ */
+@Composable
+private fun MusclePills(muscles: List<String>) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        muscles.forEach { name ->
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                // The step the app uses for a chip that is on but not selected: it has
+                // to read as a label sitting on the card, not as a button.
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -416,21 +509,18 @@ private fun Double.asMinutesSeconds(): String {
 @Composable
 private fun messageText(message: WorkoutMessage): String = when (message) {
     WorkoutMessage.Deleted -> stringResource(Res.string.common_deleted)
+    WorkoutMessage.CategoryNotFound -> stringResource(Res.string.log_msg_category_missing)
 }
 
 // --- Previews ---------------------------------------------------------------
 
 private val previewLogState = WorkoutLogUiState(
-    strengthActivities = previewActivities.filter {
-        it.measurementType == MeasurementType.STRENGTH && !it.isArchived
-    },
-    distanceActivities = previewActivities.filter {
-        it.measurementType == MeasurementType.DISTANCE_TIME
-    },
+    categories = previewCategories,
     selectedDay = PREVIEW_TODAY,
     today = PREVIEW_TODAY,
     daysWithSessions = previewDaysWithSessions,
     dayLog = previewDayLog,
+    musclesBySession = previewDayMuscles,
     isLoading = false,
 )
 
@@ -448,6 +538,7 @@ private fun WorkoutLogContentPreview() {
         WorkoutLogContent(
             state = previewLogState,
             onOpenEntry = { _, _, _ -> },
+            onNewLog = {},
             onSelectDay = {},
             onDeleteLog = {},
             onStepWeek = {},
@@ -465,6 +556,7 @@ private fun WorkoutLogContentEmptyTodayPreview() {
         WorkoutLogContent(
             state = previewLogState.copy(dayLog = emptyList()),
             onOpenEntry = { _, _, _ -> },
+            onNewLog = {},
             onSelectDay = {},
             onDeleteLog = {},
             onStepWeek = {},
@@ -489,6 +581,7 @@ private fun WorkoutLogContentNoActivitiesPreview() {
                 isLoading = false,
             ),
             onOpenEntry = { _, _, _ -> },
+            onNewLog = {},
             onSelectDay = {},
             onDeleteLog = {},
             onStepWeek = {},
@@ -509,6 +602,7 @@ private fun WorkoutLogContentLoadingPreview() {
         WorkoutLogContent(
             state = WorkoutLogUiState(selectedDay = PREVIEW_TODAY, today = PREVIEW_TODAY),
             onOpenEntry = { _, _, _ -> },
+            onNewLog = {},
             onSelectDay = {},
             onDeleteLog = {},
             onStepWeek = {},
@@ -552,29 +646,36 @@ private fun DayLogEmptyPreview() {
 }
 
 /**
- * Both measurement types in one list.
+ * Step one of logging.
  *
- * That is the whole point of the dialog: it was filtered to strength once, and an
- * activity created as distance-and-time could then never be logged at all — it simply
- * never appeared here, and there was no other way in.
+ * This dialog used to list every activity in the app, which meant you could only log
+ * something you had already created on another tab — and, earlier still, it was
+ * filtered to strength, so a distance activity could never be logged at all. It asks
+ * for the *kind* of training now, which is a question with three shipped answers on a
+ * fresh install and no prerequisite anywhere.
  */
 @PreviewLightDark
 @Composable
-private fun NewLogDialogPreview() {
+private fun CategoryPickerDialogPreview() {
     PreviewSurface {
-        NewLogDialog(
-            activities = previewActivities.filter { !it.isArchived },
+        CategoryPickerDialog(
+            categories = previewCategories.filter { !it.isArchived },
             onDismiss = {},
             onPick = {},
         )
     }
 }
 
-@Preview(name = "Nothing to log")
+/**
+ * Only reachable by deleting all three shipped categories — the seed ledger honours
+ * that rather than putting them back — so this is a state the user chose, and the
+ * text has to say how to undo it.
+ */
+@Preview(name = "No categories")
 @Composable
-private fun NewLogDialogEmptyPreview() {
+private fun CategoryPickerDialogEmptyPreview() {
     PreviewSurface {
-        NewLogDialog(activities = emptyList(), onDismiss = {}, onPick = {})
+        CategoryPickerDialog(categories = emptyList(), onDismiss = {}, onPick = {})
     }
 }
 

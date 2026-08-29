@@ -67,10 +67,6 @@ class MuscleCatalogRepositoryImpl(
             if (referencing > 0) {
                 DeleteOutcome.BlockedByHistory(referencing)
             } else {
-                // Before the leaves go, so no activity keeps a link to a muscle that
-                // no longer exists. Explicit for the same reason as everywhere else:
-                // ON DELETE CASCADE depends on a driver-level pragma.
-                db.activityMuscleQueries.deleteAllForGroup(id)
                 // The leaves before the group. muscle.group_id has no ON DELETE
                 // clause, and the driver turns foreign_keys on, so deleting a group
                 // anything still points at fails outright. countSessionsForGroup has
@@ -175,7 +171,6 @@ class MuscleCatalogRepositoryImpl(
             if (referencing > 0) {
                 DeleteOutcome.BlockedByHistory(referencing)
             } else {
-                db.activityMuscleQueries.deleteAllForMuscle(id)
                 queries.deleteMuscle(id)
                 DeleteOutcome.Deleted
             }

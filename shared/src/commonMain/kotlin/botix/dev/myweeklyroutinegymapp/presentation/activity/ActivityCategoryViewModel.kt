@@ -4,11 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategoryUsage
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveCategoryUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.DeleteCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoryUsageUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.SaveCategoryResult
-import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.UpdateCategoryUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,15 +25,15 @@ sealed interface CategoryMessage {
     data object NameTaken : CategoryMessage
 
     /**
-     * Deleted, and [uncategorisedCount] activities moved to uncategorised.
+     * Deleted, and [strippedCount] activities moved to uncategorised.
      *
      * Reported rather than silently succeeding: the activities are still there, and
      * a user who expected the delete to take them with it needs to know it did not.
      */
-    data class Deleted(val uncategorisedCount: Long) : CategoryMessage
+    data class Deleted(val strippedCount: Long) : CategoryMessage
 
     /** Archived, with the same detachment side effect as a delete. */
-    data class Archived(val uncategorisedCount: Long) : CategoryMessage
+    data class Archived(val strippedCount: Long) : CategoryMessage
 }
 
 data class ActivityCategoryUiState(
@@ -56,8 +53,6 @@ data class ActivityCategoryUiState(
  */
 class ActivityCategoryViewModel(
     private val observeCategoryUsage: ObserveCategoryUsageUseCase,
-    private val createCategory: CreateCategoryUseCase,
-    private val updateCategory: UpdateCategoryUseCase,
     private val archiveCategory: ArchiveCategoryUseCase,
     private val deleteCategory: DeleteCategoryUseCase,
 ) : ViewModel() {
@@ -86,25 +81,13 @@ class ActivityCategoryViewModel(
         message.value = null
     }
 
-    fun create(name: String, icon: String? = null, color: String? = null) {
-        viewModelScope.launch {
-            message.value = createCategory(name, icon, color).toMessage()
-        }
-    }
-
-    fun rename(id: Long, name: String, icon: String? = null, color: String? = null) {
-        viewModelScope.launch {
-            message.value = updateCategory(id, name, icon, color).toMessage()
-        }
-    }
-
     /**
      * Archiving detaches this category's activities, so the count is read from the
      * list already on screen — after the write it would be zero, and reporting zero
      * would hide the side effect entirely.
      */
     fun setArchived(id: Long, archived: Boolean) {
-        val affected = state.value.categories.firstOrNull { it.category.id == id }?.activityCount ?: 0L
+        val affected = state.value.categories.firstOrNull { it.category.id == id }?.sessionCount ?: 0L
         viewModelScope.launch {
             archiveCategory(id, archived)
             if (archived) message.value = CategoryMessage.Archived(affected)
@@ -117,13 +100,8 @@ class ActivityCategoryViewModel(
      */
     fun delete(id: Long) {
         viewModelScope.launch {
-            message.value = CategoryMessage.Deleted(deleteCategory(id).uncategorisedCount)
+            message.value = CategoryMessage.Deleted(deleteCategory(id).strippedCount)
         }
     }
 
-    private fun SaveCategoryResult.toMessage(): CategoryMessage = when (this) {
-        is SaveCategoryResult.Saved -> CategoryMessage.Saved
-        SaveCategoryResult.BlankName -> CategoryMessage.NameBlank
-        SaveCategoryResult.NameTaken -> CategoryMessage.NameTaken
-    }
 }

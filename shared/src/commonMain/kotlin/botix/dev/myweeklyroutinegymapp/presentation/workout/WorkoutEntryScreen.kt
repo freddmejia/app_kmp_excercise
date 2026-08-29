@@ -42,20 +42,21 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
 import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
 import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
-import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDistanceActivity
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDistanceSession
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewEmptySessionDetail
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewMuscleSections
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewScopedMuscleSections
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewSessionDetail
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewSessionEntries
-import botix.dev.myweeklyroutinegymapp.presentation.preview.previewStrengthActivity
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewStrengthSession
 import botix.dev.myweeklyroutinegymapp.presentation.preview.previewUntrainedMuscles
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_save
 import myweeklyroutinegymapp.shared.generated.resources.log_distance_km
 import myweeklyroutinegymapp.shared.generated.resources.log_duration_min
 import myweeklyroutinegymapp.shared.generated.resources.log_effective
-import myweeklyroutinegymapp.shared.generated.resources.log_msg_activity_missing
+import myweeklyroutinegymapp.shared.generated.resources.log_msg_session_missing
+import myweeklyroutinegymapp.shared.generated.resources.log_uncategorised
 import myweeklyroutinegymapp.shared.generated.resources.log_msg_invalid_sets
 import myweeklyroutinegymapp.shared.generated.resources.log_msg_logged
 import myweeklyroutinegymapp.shared.generated.resources.log_msg_nothing_measured
@@ -92,22 +93,22 @@ import org.koin.core.parameter.parametersOf
  */
 @Composable
 fun WorkoutEntryScreen(
-    activityId: Long,
+    sessionId: Long,
     epochDay: Long,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WorkoutEntryViewModel = koinViewModel(
         // Keyed by what the screen is *about*. Without this the store hands back the
-        // ViewModel built for the first log ever opened, with its activity and day
+        // ViewModel built for the first log ever opened, with its session and day
         // baked into the constructor, for every log after it.
-        key = "workout-entry-$activityId-$epochDay",
-        parameters = { parametersOf(activityId, epochDay) },
+        key = "workout-entry-$sessionId-$epochDay",
+        parameters = { parametersOf(sessionId, epochDay) },
     ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     // Reload first, then listen — the same order and for the same reasons as the
-    // body-weight editor. A ViewModel keyed by (activity, day) outlives the visit that
+    // body-weight editor. A ViewModel keyed by the session outlives the visit that
     // created it, so the second visit must start from the database; and the save
     // signal has no replay, so a save from the first visit cannot close the second one
     // the moment it opens.
@@ -121,7 +122,6 @@ fun WorkoutEntryScreen(
         onCheck = { muscleId -> viewModel.addSets(muscleId, effectiveSets = 1) },
         onSetSets = { muscleId, effective, warmup -> viewModel.setSets(muscleId, effective, warmup) },
         onUncheck = viewModel::uncheck,
-        onSetShowAllMuscles = viewModel::setShowAllMuscles,
         onDistanceChange = viewModel::setDistance,
         onDurationChange = viewModel::setDuration,
         onSave = viewModel::save,
@@ -140,7 +140,6 @@ fun WorkoutEntryContent(
     onCheck: (Long) -> Unit,
     onSetSets: (Long, Long, Long) -> Unit,
     onUncheck: (Long) -> Unit,
-    onSetShowAllMuscles: (Boolean) -> Unit,
     onDistanceChange: (String) -> Unit,
     onDurationChange: (String) -> Unit,
     onSave: () -> Unit,
@@ -156,10 +155,14 @@ fun WorkoutEntryContent(
             // *what* is being logged or *when*. Those two are what tell this log apart
             // from every other, so they lead the screen — the same job the date does on
             // the body-weight editor.
-            state.activity?.let { activity ->
+            state.session?.let { session ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = listOfNotNull(activity.icon, activity.name).joinToString(" "),
+                        // Null when the category was deleted after this was logged.
+                        // The log still happened and its sets still count, so it gets
+                        // a heading that says what it is rather than an empty gap.
+                        text = session.categoryName
+                            ?: stringResource(Res.string.log_uncategorised),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
@@ -177,7 +180,6 @@ fun WorkoutEntryContent(
 
                 WorkoutEntryForm.STRENGTH -> StrengthLog(
                     state = state,
-                    onSetShowAllMuscles = onSetShowAllMuscles,
                     onCheck = onCheck,
                     onSetSets = onSetSets,
                     onUncheck = onUncheck,
@@ -274,7 +276,6 @@ private fun DistanceTimeLog(
 @Composable
 private fun StrengthLog(
     state: WorkoutEntryUiState,
-    onSetShowAllMuscles: (Boolean) -> Unit,
     onCheck: (Long) -> Unit,
     onSetSets: (Long, Long, Long) -> Unit,
     onUncheck: (Long) -> Unit,
@@ -284,17 +285,6 @@ private fun StrengthLog(
 
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { TotalsCard(state) }
-
-        // Shown whenever the list is narrowed, and also once it has been widened, so
-        // "why am I seeing everything?" has an answer on screen either way.
-        if (state.isScopedToActivity || state.showAllMuscles) {
-            item(key = "scope-banner") {
-                MuscleScopeBanner(
-                    isScoped = state.isScopedToActivity,
-                    onSetShowAllMuscles = onSetShowAllMuscles,
-                )
-            }
-        }
 
         if (state.sections.isEmpty()) {
             item {
@@ -361,42 +351,6 @@ private fun TotalsCard(state: WorkoutEntryUiState) {
                     stringResource(Res.string.log_warmup_ratio, it.format1()),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-/**
- * Says which muscle list is on screen, and lets the user swap.
- *
- * The activity's linked muscles are a starting point, never a restriction — an
- * unplanned muscle has to be loggable without going back to edit the activity first.
- */
-@Composable
-private fun MuscleScopeBanner(
-    isScoped: Boolean,
-    onSetShowAllMuscles: (Boolean) -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(
-                    if (isScoped) Res.string.log_scope_activity else Res.string.log_scope_all,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = { onSetShowAllMuscles(isScoped) }) {
-                Text(
-                    stringResource(
-                        if (isScoped) Res.string.log_show_all else Res.string.log_show_activity,
-                    ),
                 )
             }
         }
@@ -515,27 +469,25 @@ private fun messageText(message: WorkoutEntryMessage): String = when (message) {
     WorkoutEntryMessage.Logged -> stringResource(Res.string.log_msg_logged)
     WorkoutEntryMessage.Removed -> stringResource(Res.string.log_msg_removed)
     WorkoutEntryMessage.InvalidSets -> stringResource(Res.string.log_msg_invalid_sets)
-    WorkoutEntryMessage.ActivityNotFound -> stringResource(Res.string.log_msg_activity_missing)
+    WorkoutEntryMessage.SessionNotFound -> stringResource(Res.string.log_msg_session_missing)
     WorkoutEntryMessage.NothingMeasured -> stringResource(Res.string.log_msg_nothing_measured)
 }
 
 // --- Previews ---------------------------------------------------------------
 
-/** Scoped to the activity's own muscles, which is how a strength log normally opens. */
+/** A strength log, with the whole muscle catalogue offered. */
 private val previewStrengthState = WorkoutEntryUiState(
     epochDay = PREVIEW_TODAY,
-    activity = previewStrengthActivity,
+    session = previewStrengthSession,
     form = WorkoutEntryForm.STRENGTH,
-    sessionId = 10,
     sections = previewScopedMuscleSections,
-    isScopedToActivity = true,
     detail = previewSessionDetail,
     untrainedThisWeek = previewUntrainedMuscles,
 )
 
 private val previewDistanceState = WorkoutEntryUiState(
     epochDay = PREVIEW_TODAY,
-    activity = previewDistanceActivity,
+    session = previewDistanceSession,
     form = WorkoutEntryForm.DISTANCE_TIME,
     distanceInput = "8.4",
     durationInput = "44",
@@ -554,7 +506,6 @@ private fun WorkoutEntryContentStrengthPreview() {
             onCheck = {},
             onSetSets = { _, _, _ -> },
             onUncheck = {},
-            onSetShowAllMuscles = {},
             onDistanceChange = {},
             onDurationChange = {},
             onSave = {},
@@ -577,7 +528,6 @@ private fun WorkoutEntryContentDistancePreview() {
             onCheck = {},
             onSetSets = { _, _, _ -> },
             onUncheck = {},
-            onSetShowAllMuscles = {},
             onDistanceChange = {},
             onDurationChange = {},
             onSave = {},
@@ -595,7 +545,6 @@ private fun WorkoutEntryContentLoadingPreview() {
             onCheck = {},
             onSetSets = { _, _, _ -> },
             onUncheck = {},
-            onSetShowAllMuscles = {},
             onDistanceChange = {},
             onDurationChange = {},
             onSave = {},
@@ -649,10 +598,7 @@ private fun StrengthLogAllMusclesPreview() {
         StrengthLog(
             state = previewStrengthState.copy(
                 sections = previewMuscleSections,
-                isScopedToActivity = false,
-                showAllMuscles = true,
             ),
-            onSetShowAllMuscles = {},
             onCheck = {},
             onSetSets = { _, _, _ -> },
             onUncheck = {},
@@ -669,11 +615,9 @@ private fun StrengthLogNoMusclesPreview() {
         StrengthLog(
             state = previewStrengthState.copy(
                 sections = emptyList(),
-                isScopedToActivity = false,
                 detail = previewEmptySessionDetail,
                 untrainedThisWeek = emptyList(),
             ),
-            onSetShowAllMuscles = {},
             onCheck = {},
             onSetSets = { _, _, _ -> },
             onUncheck = {},
@@ -704,20 +648,6 @@ private fun TotalsCardPreview() {
 }
 
 /** Both directions of the banner, which are two different sentences and two buttons. */
-@Preview
-@Composable
-private fun MuscleScopeBannerPreview() {
-    PreviewSurface {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            MuscleScopeBanner(isScoped = true, onSetShowAllMuscles = {})
-            MuscleScopeBanner(isScoped = false, onSetShowAllMuscles = {})
-        }
-    }
-}
-
 /**
  * Unchecked, checked, and checked with no warmup.
  *
@@ -788,7 +718,7 @@ private fun WorkoutEntryMessagesPreview() {
         WorkoutEntryMessage.Logged,
         WorkoutEntryMessage.Removed,
         WorkoutEntryMessage.InvalidSets,
-        WorkoutEntryMessage.ActivityNotFound,
+        WorkoutEntryMessage.SessionNotFound,
         WorkoutEntryMessage.NothingMeasured,
     )
     PreviewSurface {

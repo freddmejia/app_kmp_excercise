@@ -2,8 +2,6 @@ package botix.dev.myweeklyroutinegymapp.presentation
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityMuscleRepositoryImpl
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.BodyWeightRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.MuscleCatalogRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
@@ -13,14 +11,13 @@ import botix.dev.myweeklyroutinegymapp.di.domainModule
 import botix.dev.myweeklyroutinegymapp.di.viewModelModule
 import botix.dev.myweeklyroutinegymapp.domain.Clock
 import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityCategoryRepository
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityMuscleRepository
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.BodyWeightRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleCatalogRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.WorkoutRepository
 import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorError
 import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorViewModel
+import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -75,9 +72,7 @@ class CatalogueEditorsTest {
         modules(
             module {
                 single<Clock> { FixedClock() }
-                single<ActivityRepository> { ActivityRepositoryImpl(db, dispatcher) }
                 single<ActivityCategoryRepository> { ActivityCategoryRepositoryImpl(db, dispatcher) }
-                single<ActivityMuscleRepository> { ActivityMuscleRepositoryImpl(db, dispatcher) }
                 single<BodyWeightRepository> { BodyWeightRepositoryImpl(db, dispatcher) }
                 single<MuscleCatalogRepository> { MuscleCatalogRepositoryImpl(db, dispatcher) }
                 single<WorkoutRepository> { WorkoutRepositoryImpl(db, dispatcher) }
@@ -114,7 +109,7 @@ class CatalogueEditorsTest {
     @Test
     fun aNewCategoryOpensOnAnEmptyForm() = runTest(dispatcher) {
         val db = database()
-        categories(db).create("cardio", icon = "🏃", createdAt = 0L)
+        categories(db).create("cardio", MeasurementType.STRENGTH, icon = "🏃", createdAt = 0L)
 
         val state = categoryEditor(koin(db), CategoryEditorViewModel.NEW).state.value
 
@@ -126,7 +121,7 @@ class CatalogueEditorsTest {
     @Test
     fun anExistingCategoryOpensOnWhatItHolds() = runTest(dispatcher) {
         val db = database()
-        val id = categories(db).create("cardio", icon = "🏃", createdAt = 0L)
+        val id = categories(db).create("cardio", MeasurementType.STRENGTH, icon = "🏃", createdAt = 0L)
 
         val state = categoryEditor(koin(db), id).state.value
 
@@ -153,7 +148,7 @@ class CatalogueEditorsTest {
     @Test
     fun aNameAnotherCategoryAlreadyHoldsIsRefused() = runTest(dispatcher) {
         val db = database()
-        categories(db).create("cardio", createdAt = 0L)
+        categories(db).create("cardio", MeasurementType.STRENGTH, createdAt = 0L)
 
         val viewModel = categoryEditor(koin(db), CategoryEditorViewModel.NEW)
         val saved = savedSignals(viewModel.saved)
@@ -169,7 +164,7 @@ class CatalogueEditorsTest {
     @Test
     fun keepingItsOwnNameIsNotAClashWithItself() = runTest(dispatcher) {
         val db = database()
-        val id = categories(db).create("cardio", createdAt = 0L)
+        val id = categories(db).create("cardio", MeasurementType.STRENGTH, createdAt = 0L)
 
         val viewModel = categoryEditor(koin(db), id)
         viewModel.setIcon("🚴")
@@ -182,7 +177,7 @@ class CatalogueEditorsTest {
     @Test
     fun typingAgainClearsTheErrorTheOldNameEarned() = runTest(dispatcher) {
         val db = database()
-        categories(db).create("cardio", createdAt = 0L)
+        categories(db).create("cardio", MeasurementType.STRENGTH, createdAt = 0L)
 
         val viewModel = categoryEditor(koin(db), CategoryEditorViewModel.NEW)
         viewModel.setName("cardio")

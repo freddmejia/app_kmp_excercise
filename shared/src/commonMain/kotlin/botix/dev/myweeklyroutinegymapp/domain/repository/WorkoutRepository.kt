@@ -3,7 +3,7 @@ package botix.dev.myweeklyroutinegymapp.domain.repository
 import botix.dev.myweeklyroutinegymapp.domain.model.DailyVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
-import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.CategoryVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals
@@ -32,16 +32,37 @@ interface WorkoutRepository {
 
     suspend fun getSession(id: Long): WorkoutSession?
 
-    /** The session for an activity on a given day, if one was already started. */
-    suspend fun findSession(activityId: Long, epochDay: Long): WorkoutSession?
+    /**
+     * One session with its category name and measurement type, as a Flow.
+     *
+     * Null once the row is gone. The entry screen reads this rather than the raw
+     * [WorkoutSession] because it needs the category's name for the heading and its
+     * measurement type to choose a form, and joining once beats two lookups that can
+     * disagree.
+     */
+    fun observeSessionSummary(sessionId: Long): Flow<SessionSummary?>
 
     /**
-     * Returns the existing session for that activity and day, or creates one.
+     * The muscles each of a day's logs worked, by name, keyed by session.
      *
-     * Logging is day-oriented, so callers should not create a second session for a
-     * day that already has one.
+     * Names rather than counts, because the day card lists them: with no activity name
+     * on a session, the muscles are what tell two Gym logs on one day apart.
      */
-    suspend fun startOrResumeSession(activityId: Long, epochDay: Long, createdAt: Long): Long
+    fun observeDayMuscles(epochDay: Long): Flow<Map<Long, List<String>>>
+
+    /**
+     * Starts a log. Always a new row.
+     *
+     * It used to find-or-create by (activity, day), because an activity could only be
+     * logged once a day and reopening was the common case. Neither holds now: a day
+     * can hold two Gym sessions — a morning and an evening, or chest and then legs —
+     * and they are told apart by what is in them rather than by a name. Reopening is
+     * tapping the row, which carries the session id.
+     *
+     * [categoryId] may be null only in the sense that the column allows it; callers
+     * pass what the user picked.
+     */
+    suspend fun startSession(categoryId: Long?, epochDay: Long, createdAt: Long): Long
 
     suspend fun updateNotes(sessionId: Long, notes: String?)
 
@@ -49,7 +70,8 @@ interface WorkoutRepository {
      * Records what a distance/time session covered, in metres and seconds.
      *
      * Replaces rather than accumulates: a second ride on the same day is a second
-     * session, so the only reason to write these twice is to correct them.
+     * session — startSession always makes one — so the only reason to write these
+     * twice is to correct them.
      */
     suspend fun setDistanceTime(sessionId: Long, distanceMeters: Long?, durationSeconds: Long?)
 
@@ -79,7 +101,7 @@ interface WorkoutRepository {
     fun observeVolumePerGroup(fromEpochDay: Long, toEpochDay: Long): Flow<List<GroupVolume>>
 
     /** Per-activity totals over a window; activities with no session are absent. */
-    fun observeVolumePerActivity(fromEpochDay: Long, toEpochDay: Long): Flow<List<ActivityVolume>>
+    fun observeVolumePerCategory(fromEpochDay: Long, toEpochDay: Long): Flow<List<CategoryVolume>>
 
     /** Which muscles went untouched in the window — the "what am I neglecting" read. */
     fun observeUntrainedMuscles(fromEpochDay: Long, toEpochDay: Long): Flow<List<UntrainedMuscle>>
@@ -87,5 +109,5 @@ interface WorkoutRepository {
     fun observeDailyVolume(muscleId: Long, fromEpochDay: Long, toEpochDay: Long): Flow<List<DailyVolume>>
 
     /** Distinct days an activity was trained: feeds streaks, gaps and goal windows. */
-    fun observeTrainedDays(activityId: Long, fromEpochDay: Long, toEpochDay: Long): Flow<List<Long>>
+    fun observeTrainedDays(categoryId: Long, fromEpochDay: Long, toEpochDay: Long): Flow<List<Long>>
 }

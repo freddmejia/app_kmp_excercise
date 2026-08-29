@@ -1,4 +1,9 @@
--- A session: a header, plus whatever measures the activity it belongs to.
+-- A session: one piece of training, on one day.
+--
+-- **This is the only thing the app records.** There is no catalogue of named
+-- activities to create first and no reusable "chest day" to pick from — a session
+-- carries the day it happened, the kind of training it was, and what was worked. See
+-- 6.sqm for what was removed and why.
 --
 -- A STRENGTH session is measured by the session_muscle rows hanging off it — no load,
 -- no reps (TRAINING.md §1), the atomic unit is the set, split effective vs. warmup.
@@ -8,8 +13,12 @@
 -- units are a display choice, so changing one is formatting rather than a migration.
 -- Both are null for every strength session.
 CREATE TABLE workout_session (
+    -- Which kind of training, and therefore which form it opens. Nullable, and
+    -- ON DELETE SET NULL rather than RESTRICT: deleting a category must not be able
+    -- to destroy training history, so a session outlives the label on it and the log
+    -- screen renders the orphan with a fallback.
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_id      INTEGER NOT NULL REFERENCES activity(id),
+    category_id      INTEGER REFERENCES activity_category(id) ON DELETE SET NULL,
     date_epoch_day   INTEGER NOT NULL,
     notes            TEXT,
     created_at       INTEGER NOT NULL,
@@ -30,7 +39,7 @@ CREATE TABLE session_muscle (
 );
 
 CREATE INDEX workout_session_date_idx ON workout_session(date_epoch_day);
-CREATE INDEX workout_session_activity_idx ON workout_session(activity_id);
+CREATE INDEX workout_session_category_idx ON workout_session(category_id);
 CREATE INDEX session_muscle_session_idx ON session_muscle(session_id);
 CREATE INDEX session_muscle_muscle_idx ON session_muscle(muscle_id);
 
@@ -44,14 +53,21 @@ SELECT * FROM workout_session
 WHERE date_epoch_day BETWEEN :fromDay AND :toDay
 ORDER BY date_epoch_day DESC, created_at DESC;
 
--- Everything the day view's cards need, in one row each: which activity, and the
--- totals, without a follow-up query per session.
+-- Everything the day view's cards need, in one row each: which kind of training, its
+-- measurement type, and the totals, without a follow-up query per session.
 --
--- LEFT JOIN so a session with nothing checked yet still appears. It has to: it was
--- created deliberately, and if it were hidden there would be no way to reopen or
--- delete it, only an invisible row inflating every count that scans sessions.
+-- Both joins are LEFT. On session_muscle so a log with nothing ticked yet still
+-- appears — it was created deliberately, and hiding it would leave no way to reopen
+-- or delete it, only an invisible row inflating every count that scans sessions. On
+-- activity_category because category_id is nullable: a session whose category was
+-- deleted still happened, and an INNER JOIN would erase it from the day it was
+-- logged on.
+--
+-- measurement_type comes along so the day list knows which shape to render without
+-- inferring it from which columns happen to be null.
 selectDaySummaries:
-SELECT ws.id, ws.activity_id, a.name AS activity_name, ws.date_epoch_day, ws.notes,
+SELECT ws.id, ws.category_id, c.name AS category_name, c.measurement_type,
+       ws.date_epoch_day, ws.notes,
        -- CAST because SQLDelight types a bare SUM() as REAL; the rest of the
        -- schema does the same so set counts stay Long end to end.
        CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
@@ -59,18 +75,49 @@ SELECT ws.id, ws.activity_id, a.name AS activity_name, ws.date_epoch_day, ws.not
        COUNT(sm.id) AS muscle_count,
        ws.distance_meters, ws.duration_seconds
 FROM workout_session ws
-JOIN activity a ON a.id = ws.activity_id
+LEFT JOIN activity_category c ON c.id = ws.category_id
 LEFT JOIN session_muscle sm ON sm.session_id = ws.id
 WHERE ws.date_epoch_day = ?
 GROUP BY ws.id
 ORDER BY ws.created_at ASC;
 
-selectSessionByActivityAndDay:
-SELECT * FROM workout_session WHERE activity_id = ? AND date_epoch_day = ?;
+-- Which muscles each of a day's logs worked, by name.
+--
+-- The day card lists them rather than counting them: "Biceps · Chest" says what the
+-- session was in a way "2 muscles" cannot, and it is the only thing distinguishing two
+-- Gym logs on the same day now that neither carries a name.
+--
+-- One query for the whole day rather than one per row — the list is a LazyColumn and a
+-- per-row query would fire as each card scrolled into view.
+selectDayMuscles:
+SELECT sm.session_id, m.name AS muscle_name
+FROM session_muscle sm
+JOIN workout_session ws ON ws.id = sm.session_id
+JOIN muscle m ON m.id = sm.muscle_id
+WHERE ws.date_epoch_day = ?
+ORDER BY m.name ASC;
+
+-- One session, with its category resolved — what the entry screen opens on.
+--
+-- Keyed by id rather than by (category, day) because a day may hold several logs of
+-- the same kind: two Gym sessions on one Tuesday are two rows, told apart by what is
+-- in them, so the pair no longer identifies anything.
+selectSessionDetailById:
+SELECT ws.id, ws.category_id, c.name AS category_name, c.measurement_type,
+       ws.date_epoch_day, ws.notes, ws.distance_meters, ws.duration_seconds
+FROM workout_session ws
+LEFT JOIN activity_category c ON c.id = ws.category_id
+WHERE ws.id = ?;
 
 insertSession:
-INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at)
+INSERT INTO workout_session (category_id, date_epoch_day, notes, created_at)
 VALUES (?, ?, ?, ?);
+
+-- Deleting a category strips the label off its logs. Explicit rather than relying on
+-- ON DELETE SET NULL, which only fires while PRAGMA foreign_keys is on — a per-driver
+-- setting, and off in the JDBC driver the tests use.
+clearCategory:
+UPDATE workout_session SET category_id = NULL WHERE category_id = ?;
 
 updateSessionNotes:
 UPDATE workout_session SET notes = ? WHERE id = ?;
@@ -145,21 +192,21 @@ FROM session_muscle WHERE session_id = ?;
 
 -- ---------- metrics (§9 traceability) ----------
 
--- Volume per activity over a window: what the Activities screen shows for a week.
+-- Volume per kind of training over a window.
 --
--- Only activities with a session in the range come back, which is the filter itself:
--- absence from this result *is* "not trained that week", so the screen needs no
--- second query to work out which rows to drop.
+-- Only categories with a session in the range come back, which is the filter itself:
+-- absence from this result *is* "not trained that week", so a caller needs no second
+-- query to work out which rows to drop.
 --
--- distinct_days counts days rather than sessions, so training the same activity twice
--- in one day reads as one day trained — the frequency question people actually ask.
-volumePerActivityInRange:
-SELECT ws.activity_id,
+-- distinct_days counts days rather than sessions, so two Gym logs on one Tuesday read
+-- as one day trained — the frequency question people actually ask.
+volumePerCategoryInRange:
+SELECT ws.category_id,
        CAST(COALESCE(SUM(sm.effective_sets), 0) AS INTEGER) AS effective_sets,
        CAST(COALESCE(SUM(sm.warmup_sets), 0) AS INTEGER) AS warmup_sets,
        COUNT(DISTINCT ws.date_epoch_day) AS distinct_days,
        COUNT(DISTINCT ws.id) AS session_count,
-       -- Null, not zero, when the activity has no distance/time sessions in range:
+       -- Null, not zero, when the category has no distance/time sessions in range:
        -- the row then shows sets, and "0 km" would be a measurement it never took.
        -- CAST for the same reason as the set sums above: SQLDelight types a bare
        -- SUM() as REAL. CAST(NULL AS INTEGER) is still NULL, so the "never measured"
@@ -169,7 +216,7 @@ SELECT ws.activity_id,
 FROM workout_session ws
 LEFT JOIN session_muscle sm ON sm.session_id = ws.id
 WHERE ws.date_epoch_day BETWEEN :fromDay AND :toDay
-GROUP BY ws.activity_id;
+GROUP BY ws.category_id;
 
 -- Volume per muscle over a window: effective sets, and the days it was trained.
 volumePerMuscleInRange:
@@ -231,10 +278,10 @@ WHERE sm.muscle_id = :muscleId AND ws.date_epoch_day BETWEEN :fromDay AND :toDay
 GROUP BY ws.date_epoch_day
 ORDER BY ws.date_epoch_day ASC;
 
--- Streaks / gaps / goal windows: the distinct days an activity was trained.
-trainedDaysForActivity:
+-- Streaks / gaps / goal windows: the distinct days a kind of training happened.
+trainedDaysForCategory:
 SELECT DISTINCT date_epoch_day FROM workout_session
-WHERE activity_id = :activityId AND date_epoch_day BETWEEN :fromDay AND :toDay
+WHERE category_id = :categoryId AND date_epoch_day BETWEEN :fromDay AND :toDay
 ORDER BY date_epoch_day ASC;
 
 lastInsertRowId:

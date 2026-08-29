@@ -2,8 +2,10 @@ package botix.dev.myweeklyroutinegymapp.presentation.activity
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.CreateCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoriesUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ObserveCategoryUsageUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.SaveCategoryResult
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.UpdateCategoryUseCase
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,6 +30,23 @@ sealed interface CategoryEditorError {
 data class CategoryEditorUiState(
     val name: String = "",
     val icon: String = "",
+    /**
+     * What everything filed in this category is measured by.
+     *
+     * This is the field the activity form used to own. It moved here because the
+     * answer is the same for every activity in a category — "Bicycle" is distance and
+     * time whatever you call the ride — and asking once per category instead of once
+     * per activity is the difference between saying it three times a week and saying
+     * it three times ever.
+     */
+    val measurementType: MeasurementType = MeasurementType.STRENGTH,
+    /**
+     * True once something has been logged under this category. The type is still
+     * editable — it decides what is logged here *next* and never rewrites what is
+     * already recorded — but the screen says so, because "changes nothing that
+     * exists" is not what a user assumes a type field does.
+     */
+    val hasLogs: Boolean = false,
     val isLoading: Boolean = true,
     val error: CategoryEditorError? = null,
 ) {
@@ -46,6 +65,7 @@ data class CategoryEditorUiState(
 class CategoryEditorViewModel(
     private val categoryId: Long,
     private val observeCategories: ObserveCategoriesUseCase,
+    private val observeUsage: ObserveCategoryUsageUseCase,
     private val createCategory: CreateCategoryUseCase,
     private val updateCategory: UpdateCategoryUseCase,
 ) : ViewModel() {
@@ -74,10 +94,17 @@ class CategoryEditorViewModel(
             } else {
                 observeCategories(includeArchived = true).first().firstOrNull { it.id == categoryId }
             }
+            // Only to decide whether to warn about the measurement type, so a
+            // category nothing has been logged under does not carry a caveat that
+            // applies to nothing.
+            val inUse = categoryId != NEW &&
+                observeUsage().first().any { it.category.id == categoryId && it.sessionCount > 0 }
             _state.update {
                 it.copy(
                     name = existing?.name.orEmpty(),
                     icon = existing?.icon.orEmpty(),
+                    measurementType = existing?.measurementType ?: MeasurementType.STRENGTH,
+                    hasLogs = inUse,
                     isLoading = false,
                 )
             }
@@ -89,6 +116,9 @@ class CategoryEditorViewModel(
 
     fun setIcon(text: String) = _state.update { it.copy(icon = text, error = null) }
 
+    fun setMeasurementType(type: MeasurementType) =
+        _state.update { it.copy(measurementType = type, error = null) }
+
     fun save() {
         viewModelScope.launch {
             val current = _state.value
@@ -97,9 +127,9 @@ class CategoryEditorViewModel(
             // are allowed, and the domain is the half that cannot be bypassed.
             val icon = current.icon.trim().takeIf { it.isNotBlank() }
             val result = if (categoryId == NEW) {
-                createCategory(current.name, icon)
+                createCategory(current.name, current.measurementType, icon)
             } else {
-                updateCategory(categoryId, current.name, icon)
+                updateCategory(categoryId, current.name, current.measurementType, icon)
             }
             when (result) {
                 is SaveCategoryResult.Saved -> _saved.tryEmit(Unit)

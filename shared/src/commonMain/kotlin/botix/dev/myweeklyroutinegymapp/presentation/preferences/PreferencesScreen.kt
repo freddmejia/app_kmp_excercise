@@ -26,7 +26,8 @@ import myweeklyroutinegymapp.shared.generated.resources.preferences_muscles_hint
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Where the catalogues live.
+ * Where the catalogues live: muscles, and the categories that say what kinds of
+ * training exist.
  *
  * Muscles and categories were reached from buttons in the corner of the two screens
  * that *use* them — the muscle catalogue from the log, categories from the activity

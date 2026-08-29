@@ -15,8 +15,11 @@ expect class DriverFactory {
 /**
  * Builds the database with its column adapters.
  *
- * Only `activity.measurement_type` needs one — booleans map natively in the SQLite
- * dialect. Prefer a single long-lived instance: each driver opens its own connection.
+ * One column needs one — `activity_category.measurement_type`. It was two until
+ * activities were removed (6.sqm) and the category became the only thing carrying a
+ * measurement type. Booleans map natively in the SQLite dialect.
+ *
+ * Prefer a single long-lived instance: each driver opens its own connection.
  */
 fun createDatabase(driverFactory: DriverFactory): GymDatabase =
     createDatabase(driverFactory.createDriver())
@@ -24,7 +27,7 @@ fun createDatabase(driverFactory: DriverFactory): GymDatabase =
 fun createDatabase(driver: SqlDriver): GymDatabase =
     GymDatabase(
         driver = driver,
-        activityAdapter = Activity.Adapter(
+        activity_categoryAdapter = Activity_category.Adapter(
             measurement_typeAdapter = app.cash.sqldelight.EnumColumnAdapter(),
         ),
     )

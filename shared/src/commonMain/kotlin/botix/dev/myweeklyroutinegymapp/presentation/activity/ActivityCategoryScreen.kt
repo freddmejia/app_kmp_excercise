@@ -50,7 +50,7 @@ import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_new
 import myweeklyroutinegymapp.shared.generated.resources.common_save
 import myweeklyroutinegymapp.shared.generated.resources.common_saved
-import myweeklyroutinegymapp.shared.generated.resources.plural_activities
+import myweeklyroutinegymapp.shared.generated.resources.plural_sessions
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -149,15 +149,15 @@ fun ActivityCategoryContent(
             },
             text = {
                 Text(
-                    if (usage.activityCount == 0L) {
+                    if (usage.sessionCount == 0L) {
                         stringResource(Res.string.category_delete_none)
                     } else {
                         stringResource(
                             Res.string.category_delete_count,
                             pluralStringResource(
-                                Res.plurals.plural_activities,
-                                usage.activityCount.toInt(),
-                                usage.activityCount.toString(),
+                                Res.plurals.plural_sessions,
+                                usage.sessionCount.toInt(),
+                                usage.sessionCount.toString(),
                             ),
                         )
                     },
@@ -218,13 +218,13 @@ private fun CategoryRow(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = if (usage.activityCount == 0L) {
+                        text = if (usage.sessionCount == 0L) {
                             stringResource(Res.string.category_no_activities)
                         } else {
                             pluralStringResource(
-                                Res.plurals.plural_activities,
-                                usage.activityCount.toInt(),
-                                usage.activityCount.toString(),
+                                Res.plurals.plural_sessions,
+                                usage.sessionCount.toInt(),
+                                usage.sessionCount.toString(),
                             )
                         },
                         style = MaterialTheme.typography.labelMedium,
@@ -252,26 +252,26 @@ private fun messageText(message: CategoryMessage): String = when (message) {
     CategoryMessage.Saved -> stringResource(Res.string.common_saved)
     CategoryMessage.NameBlank -> stringResource(Res.string.category_msg_name_blank)
     CategoryMessage.NameTaken -> stringResource(Res.string.category_msg_name_taken)
-    is CategoryMessage.Deleted -> when (message.uncategorisedCount) {
+    is CategoryMessage.Deleted -> when (message.strippedCount) {
         0L -> stringResource(Res.string.common_deleted)
         else -> stringResource(
             Res.string.category_msg_deleted_count,
             pluralStringResource(
-                Res.plurals.plural_activities,
-                message.uncategorisedCount.toInt(),
-                message.uncategorisedCount.toString(),
+                Res.plurals.plural_sessions,
+                message.strippedCount.toInt(),
+                message.strippedCount.toString(),
             ),
         )
     }
 
-    is CategoryMessage.Archived -> when (message.uncategorisedCount) {
+    is CategoryMessage.Archived -> when (message.strippedCount) {
         0L -> stringResource(Res.string.common_archived)
         else -> stringResource(
             Res.string.category_msg_archived_count,
             pluralStringResource(
-                Res.plurals.plural_activities,
-                message.uncategorisedCount.toInt(),
-                message.uncategorisedCount.toString(),
+                Res.plurals.plural_sessions,
+                message.strippedCount.toInt(),
+                message.strippedCount.toString(),
             ),
         )
     }
@@ -374,11 +374,11 @@ private fun CategoryMessagesPreview() {
         CategoryMessage.Saved,
         CategoryMessage.NameBlank,
         CategoryMessage.NameTaken,
-        CategoryMessage.Deleted(uncategorisedCount = 0),
-        CategoryMessage.Deleted(uncategorisedCount = 1),
-        CategoryMessage.Deleted(uncategorisedCount = 6),
-        CategoryMessage.Archived(uncategorisedCount = 0),
-        CategoryMessage.Archived(uncategorisedCount = 3),
+        CategoryMessage.Deleted(strippedCount = 0),
+        CategoryMessage.Deleted(strippedCount = 1),
+        CategoryMessage.Deleted(strippedCount = 6),
+        CategoryMessage.Archived(strippedCount = 0),
+        CategoryMessage.Archived(strippedCount = 3),
     )
     PreviewSurface {
         Column(

@@ -11,7 +11,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.SeededGroup
 import botix.dev.myweeklyroutinegymapp.domain.model.SeededMuscle
 import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleCatalogRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleSeedSource
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
+import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncMuscleSeedUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -232,10 +232,10 @@ class MuscleSeedTest {
         val chest = repo.observeGroups().first().first { it.name == "Chest" }
         val upper = repo.observeMusclesInGroup(chest.id).first().first { it.name == "Upper chest" }
 
-        val activityId = ActivityRepositoryImpl(db, dispatcher)
+        val categoryId = ActivityCategoryRepositoryImpl(db, dispatcher)
             .create("Gym", MeasurementType.STRENGTH, createdAt = 0L)
         val workouts = WorkoutRepositoryImpl(db, dispatcher)
-        val session = workouts.startOrResumeSession(activityId, epochDay = 20_000L, createdAt = 0L)
+        val session = workouts.startSession(categoryId, epochDay = 20_000L, createdAt = 0L)
         workouts.addSets(session, upper.id, effectiveSets = 3L, warmupSets = 0L)
 
         // Deleting the leaves first must not have widened what a delete is allowed to

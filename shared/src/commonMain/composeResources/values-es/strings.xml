@@ -6,13 +6,11 @@
     <string name="common_save">Guardar</string>
     <string name="common_delete">Eliminar</string>
     <string name="common_archive">Archivar</string>
-    <string name="common_unarchive">Desarchivar</string>
     <string name="common_new">Nueva</string>
     <string name="common_add">Añadir</string>
     <string name="common_back">Atrás</string>
     <string name="common_go">Ir</string>
     <string name="common_all">Todas</string>
-    <string name="common_none">Ninguna</string>
     <string name="common_name">Nombre</string>
     <string name="common_icon_optional">Icono (emoji, opcional)</string>
     <string name="common_saved">Guardado.</string>
@@ -55,32 +53,6 @@
     <string name="week_range_cross_month">%1$s %2$s – %3$s %4$s %5$s</string>
     <string name="week_range_cross_year">%1$s %2$s %3$s – %4$s %5$s %6$s</string>
 
-    <string name="activities_title">Actividades</string>
-    <string name="activities_empty">No hay actividades aquí.</string>
-    <string name="activities_empty_in_category">No hay actividades en esta categoría.</string>
-    <string name="activities_empty_hint">Una actividad declara qué haces y cómo se mide.</string>
-    <string name="activities_trained_day">Entrenado %1$s</string>
-    <string name="activities_nothing_trained_day">Nada entrenado %1$s</string>
-    <string name="activities_nothing_trained_day_hint">Elige otro día para ver lo que entrenaste.</string>
-    <string name="activities_not_trained_day">No entrenado este día</string>
-    <string name="activities_uncategorised">Sin categoría</string>
-    <string name="activities_archived_badge">Archivada</string>
-    <string name="activity_filter_active">Activas</string>
-    <string name="activity_filter_archived">Archivadas</string>
-    <string name="activity_filter_all">Todas</string>
-    <string name="activities_day_volume">%1$s efectivas · %2$s calentamiento · %3$s</string>
-    <string name="activities_day_distance">%1$s km · %2$s min · %3$s</string>
-    <string name="activity_new_title">Nueva actividad</string>
-    <string name="activity_edit_title">Editar actividad</string>
-    <string name="activity_category_label">Categoría</string>
-    <string name="activity_measure_question">¿Cómo se mide?</string>
-    <string name="activity_muscles_optional">Músculos (opcional)</string>
-    <string name="activity_muscles_hint">Déjalo vacío y la pantalla de registro ofrecerá todos los músculos.</string>
-    <string name="activity_no_muscles_hint">Aún no hay músculos. Añádelos en Preferencias, en Músculos.</string>
-    <string name="activity_msg_name_blank">Ponle un nombre a la actividad.</string>
-    <string name="activity_msg_name_taken">Otra actividad activa ya usa ese nombre.</string>
-    <string name="activity_msg_delete_blocked">No se puede eliminar: %1$s la referencian. Archívala en su lugar.</string>
-    <string name="activity_msg_type_locked">El tipo está bloqueado: %1$s ya registradas.</string>
     <string name="measure_strength">Fuerza — músculos y series</string>
     <string name="measure_distance">Distancia y tiempo</string>
     <string name="measure_simple">Simple — lo hice ese día</string>
@@ -119,12 +91,12 @@
     <string name="log_edit">Editar registro</string>
     <string name="log_nothing_today">Nada registrado hoy.</string>
     <string name="log_nothing_day">Nada registrado ese día.</string>
-    <string name="log_hint_no_activities">Crea primero una actividad de fuerza en la pestaña Actividades.</string>
     <string name="log_hint_new_log">Usa \"Nuevo registro\" para empezar uno ese día.</string>
     <string name="log_nothing_checked">Nada marcado todavía</string>
     <string name="log_summary">%1$s efectivas · %2$s calentamiento · %3$s</string>
     <string name="log_delete_title">¿Eliminar este registro?</string>
     <string name="log_delete_empty">%1$s — no se registró nada en él.</string>
+    <string name="log_delete_measures">%1$s — se eliminará %2$s.</string>
     <string name="log_delete_count">%1$s — se eliminarán %2$s en %3$s.</string>
     <string name="log_no_strength_activities">Aún no hay actividades de fuerza. Crea una en la pestaña Actividades — solo las de tipo FUERZA usan este formulario.</string>
     <string name="log_no_muscles">No hay músculos en el catálogo.</string>
@@ -137,12 +109,10 @@
     <string name="log_msg_logged">Registrado.</string>
     <string name="log_msg_removed">Eliminado.</string>
     <string name="log_msg_invalid_sets">Un músculo marcado necesita al menos una serie efectiva.</string>
-    <string name="log_msg_activity_missing">Esa actividad ya no existe.</string>
     <string name="log_distance_km">Distancia (km)</string>
     <string name="log_duration_min">Duración (min)</string>
     <string name="log_distance_time_title">Registrar %1$s</string>
     <string name="log_msg_nothing_measured">Introduce una distancia o un tiempo.</string>
-    <string name="log_no_activities_at_all">Aún no hay actividades. Crea una en la pestaña Actividades.</string>
     <string name="log_distance_summary">%1$s km · %2$s min</string>
     <string name="log_pace">%1$s /km</string>
     <string name="log_scope_activity">Mostrando los músculos de esta actividad.</string>
@@ -219,10 +189,27 @@
     <string name="muscle_seed_obliques">Oblicuos</string>
     <string name="muscle_seed_neck">Cuello</string>
 
-    <plurals name="plural_activities">
-        <item quantity="one">%1$s actividad</item>
-        <item quantity="other">%1$s actividades</item>
-    </plurals>
+    <!-- ================= shipped categories =================
+         Names of the categories the app ships (see ResourceCategorySeed). Stored in
+         the database like the muscle names above, and retranslated by the same
+         start-up pass. The measurement each one carries is NOT here: it is a
+         contract, not a label, and it never changes once a category exists. -->
+    <string name="category_seed_gym">Gimnasio</string>
+    <string name="category_seed_swim">Natación</string>
+    <string name="category_seed_bicycle">Bicicleta</string>
+    <string name="category_seed_running">Correr</string>
+
+    <string name="log_pick_category">¿Qué hiciste?</string>
+    <string name="log_no_categories">Aún no hay categorías. Añade una en Preferencias, en Categorías.</string>
+
+    <string name="log_uncategorised">Sin categoría</string>
+    <string name="log_msg_session_missing">Este registro ya no existe.</string>
+
+    <string name="log_msg_category_missing">Esa categoría ya no existe.</string>
+
+    <string name="category_measure_question">¿Cómo se mide?</string>
+    <string name="category_measure_existing">Se aplica a lo que registres aquí a partir de ahora. Los registros ya guardados conservan su medida.</string>
+
     <plurals name="plural_muscles">
         <item quantity="one">%1$s músculo</item>
         <item quantity="other">%1$s músculos</item>

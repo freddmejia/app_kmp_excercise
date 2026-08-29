@@ -1,5 +1,6 @@
 package botix.dev.myweeklyroutinegymapp.domain.repository
 
+import botix.dev.myweeklyroutinegymapp.domain.model.SeededCategory
 import botix.dev.myweeklyroutinegymapp.domain.model.SeededGroup
 
 /**
@@ -14,4 +15,12 @@ import botix.dev.myweeklyroutinegymapp.domain.model.SeededGroup
  */
 fun interface MuscleSeedSource {
     suspend fun groups(): List<SeededGroup>
+}
+
+/**
+ * Where the shipped categories come from. Same reasoning as [MuscleSeedSource]: the
+ * names are string resources, and the domain does not import one.
+ */
+fun interface CategorySeedSource {
+    suspend fun categories(): List<SeededCategory>
 }

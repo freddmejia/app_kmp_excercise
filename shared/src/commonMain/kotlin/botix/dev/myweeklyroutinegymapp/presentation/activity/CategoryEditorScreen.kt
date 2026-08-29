@@ -26,6 +26,15 @@ import myweeklyroutinegymapp.shared.generated.resources.category_msg_name_taken
 import myweeklyroutinegymapp.shared.generated.resources.common_icon_optional
 import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_save
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
+import myweeklyroutinegymapp.shared.generated.resources.category_measure_existing
+import myweeklyroutinegymapp.shared.generated.resources.category_measure_question
+import myweeklyroutinegymapp.shared.generated.resources.measure_distance
+import myweeklyroutinegymapp.shared.generated.resources.measure_simple
+import myweeklyroutinegymapp.shared.generated.resources.measure_strength
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -62,6 +71,7 @@ fun CategoryEditorScreen(
         state = state,
         onNameChange = viewModel::setName,
         onIconChange = viewModel::setIcon,
+        onMeasurementChange = viewModel::setMeasurementType,
         onSave = viewModel::save,
         modifier = modifier,
     )
@@ -72,6 +82,7 @@ fun CategoryEditorContent(
     state: CategoryEditorUiState,
     onNameChange: (String) -> Unit,
     onIconChange: (String) -> Unit,
+    onMeasurementChange: (MeasurementType) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -112,6 +123,40 @@ fun CategoryEditorContent(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        // The field the activity form used to own.
+        //
+        // It is here because a category *is* the measurement now: picking one while
+        // logging is how the user says what kind of training this was, and the form
+        // that opens follows from it. Asking once per category instead of once per log
+        // is the difference between saying it three times a week and saying it once.
+        //
+        // The list is fixed, unlike the categories themselves: each value is a logging
+        // form and a set of metrics that exist in code, not user data.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(Res.string.category_measure_question),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            MeasurementType.entries.forEach { option ->
+                FilterChip(
+                    selected = option == state.measurementType,
+                    onClick = { onMeasurementChange(option) },
+                    label = { Text(stringResource(option.labelRes())) },
+                )
+            }
+            // Changing it does not reach the logs already recorded here — they keep
+            // the type they were logged under, and so do their numbers. Said out loud,
+            // because "changes nothing that exists" is not what anyone assumes a type
+            // field does.
+            if (state.hasLogs) {
+                Text(
+                    stringResource(Res.string.category_measure_existing),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         Button(
             onClick = onSave,
             enabled = state.canSave,
@@ -137,6 +182,7 @@ private fun CategoryEditorContentPreview() {
             state = CategoryEditorUiState(name = "Mobility", icon = "🧘", isLoading = false),
             onNameChange = {},
             onIconChange = {},
+            onMeasurementChange = {},
             onSave = {},
         )
     }
@@ -150,6 +196,7 @@ private fun CategoryEditorContentNewPreview() {
             state = CategoryEditorUiState(isLoading = false),
             onNameChange = {},
             onIconChange = {},
+            onMeasurementChange = {},
             onSave = {},
         )
     }
@@ -171,6 +218,7 @@ private fun CategoryEditorContentNameBlankPreview() {
             ),
             onNameChange = {},
             onIconChange = {},
+            onMeasurementChange = {},
             onSave = {},
         )
     }
@@ -188,6 +236,7 @@ private fun CategoryEditorContentNameTakenPreview() {
             ),
             onNameChange = {},
             onIconChange = {},
+            onMeasurementChange = {},
             onSave = {},
         )
     }
@@ -201,7 +250,21 @@ private fun CategoryEditorContentLoadingPreview() {
             state = CategoryEditorUiState(),
             onNameChange = {},
             onIconChange = {},
+            onMeasurementChange = {},
             onSave = {},
         )
     }
+}
+
+/**
+ * What each measurement type is called.
+ *
+ * It lived on the activity editor, which is gone. The strings did not change: they
+ * describe the shape of a log, and that is the same fact whichever row carries it.
+ */
+@Composable
+internal fun MeasurementType.labelRes(): StringResource = when (this) {
+    MeasurementType.STRENGTH -> Res.string.measure_strength
+    MeasurementType.DISTANCE_TIME -> Res.string.measure_distance
+    MeasurementType.SIMPLE -> Res.string.measure_simple
 }

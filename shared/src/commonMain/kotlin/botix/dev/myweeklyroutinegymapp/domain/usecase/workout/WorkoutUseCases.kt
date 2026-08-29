@@ -6,12 +6,12 @@ import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
-import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.CategoryVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionDetail
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals
 import botix.dev.myweeklyroutinegymapp.domain.model.UntrainedMuscle
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityRepository
+import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityCategoryRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleCatalogRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.WorkoutRepository
 import kotlinx.coroutines.flow.Flow
@@ -21,13 +21,8 @@ import kotlinx.coroutines.flow.map
 sealed interface StartSessionResult {
     data class Started(val sessionId: Long) : StartSessionResult
 
-    data object ActivityNotFound : StartSessionResult
-
-    /**
-     * This flow captures muscles and sets, which only means anything for a strength
-     * activity. A distance or presence activity uses its own form.
-     */
-    data object NotAStrengthActivity : StartSessionResult
+    /** The category was deleted between the dialog listing it and this being called. */
+    data object CategoryNotFound : StartSessionResult
 }
 
 /**
@@ -38,11 +33,6 @@ sealed interface StartSessionResult {
  */
 sealed interface LogDistanceTimeResult {
     data object Logged : LogDistanceTimeResult
-
-    data object ActivityNotFound : LogDistanceTimeResult
-
-    /** The mirror of [StartSessionResult.NotAStrengthActivity], pointing the other way. */
-    data object NotADistanceTimeActivity : LogDistanceTimeResult
 
     /**
      * Neither measure was given, or one of them was not positive.
@@ -62,69 +52,68 @@ sealed interface LogSetsResult {
 }
 
 /**
- * Opens the session for an activity on a day, reusing the existing one if the day was
- * already started.
+ * Starts a log: one session, on one day, under one category.
  *
- * The strength check lives here rather than in the repository because it is a rule
- * about *which flow applies*, not about storage integrity — the schema is happy to
- * hold the row either way.
+ * ### It always creates
+ * It took an activity and found-or-created by (activity, day). Neither half survives:
+ * there are no activities, and a day may hold several logs of the same kind — two Gym
+ * sessions on one Tuesday are two rows, told apart by what is in them rather than by a
+ * name. Reopening is tapping the row.
+ *
+ * ### It no longer asks what the category measures
+ * There used to be a guard here refusing anything but strength, because this opened a
+ * session for muscles to be checked into while a distance log was written in one go by
+ * a different use case. Both shapes start with a row now, and the form that follows is
+ * chosen from the category's measurement type — so a guard here would only be able to
+ * refuse work it is not doing.
+ *
+ * The category still has to exist. That is the one thing that can be wrong by the time
+ * this runs: the dialog listed it, and it could have been deleted since.
  */
-class StartOrResumeSessionUseCase(
+class StartSessionUseCase(
     private val workouts: WorkoutRepository,
-    private val activities: ActivityRepository,
+    private val categories: ActivityCategoryRepository,
     private val clock: Clock,
 ) {
-    suspend operator fun invoke(activityId: Long, epochDay: Long = clock.today()): StartSessionResult {
-        val activity = activities.getById(activityId) ?: return StartSessionResult.ActivityNotFound
-        if (activity.measurementType != MeasurementType.STRENGTH) {
-            return StartSessionResult.NotAStrengthActivity
-        }
+    suspend operator fun invoke(categoryId: Long, epochDay: Long = clock.today()): StartSessionResult {
+        categories.getById(categoryId) ?: return StartSessionResult.CategoryNotFound
         return StartSessionResult.Started(
-            workouts.startOrResumeSession(activityId, epochDay, clock.nowMillis()),
+            workouts.startSession(categoryId, epochDay, clock.nowMillis()),
         )
     }
 }
 
+
 /**
- * Logs a distance/time activity: one session, both measures, done.
+ * Corrects a distance/time session that already exists.
  *
- * Deliberately not folded into [StartOrResumeSessionUseCase]. That one opens a
- * session and leaves it open for muscles to be checked into over the course of a day;
- * this one has everything it needs at the moment it is called. Sharing an entry point
- * would mean a "start" that sometimes finishes and sometimes does not.
- *
- * It still goes through `startOrResumeSession` underneath, so logging the same
- * activity twice on one day *corrects* that day rather than stacking a second row —
- * matching the strength flow, where a day holds one session per activity.
+ * Separate from [LogDistanceTimeUseCase] now that starting always creates: without
+ * this, reopening a ride to fix "30" to "31" would add a second ride to the day.
  */
-class LogDistanceTimeUseCase(
-    private val workouts: WorkoutRepository,
-    private val activities: ActivityRepository,
-    private val clock: Clock,
-) {
+class SetSessionDistanceTimeUseCase(private val workouts: WorkoutRepository) {
     suspend operator fun invoke(
-        activityId: Long,
+        sessionId: Long,
         distanceMeters: Long?,
         durationSeconds: Long?,
-        epochDay: Long = clock.today(),
     ): LogDistanceTimeResult {
-        val activity = activities.getById(activityId)
-            ?: return LogDistanceTimeResult.ActivityNotFound
-        if (activity.measurementType != MeasurementType.DISTANCE_TIME) {
-            return LogDistanceTimeResult.NotADistanceTimeActivity
-        }
-        // Zero is rejected rather than stored: it reads as "measured, and it was
-        // none", which is never what was meant.
-        val distance = distanceMeters?.takeIf { it > 0L }
-        val duration = durationSeconds?.takeIf { it > 0L }
-        if (distance == null && duration == null) {
-            return LogDistanceTimeResult.NothingMeasured
-        }
-
-        val sessionId = workouts.startOrResumeSession(activityId, epochDay, clock.nowMillis())
-        workouts.setDistanceTime(sessionId, distance, duration)
+        val measures = measured(distanceMeters, durationSeconds)
+            ?: return LogDistanceTimeResult.NothingMeasured
+        workouts.setDistanceTime(sessionId, measures.first, measures.second)
         return LogDistanceTimeResult.Logged
     }
+}
+
+/**
+ * The pair to store, or null when neither measure is real.
+ *
+ * Zero is rejected rather than stored: it reads as "measured, and it was none", which
+ * is never what was meant. Either measure alone is a real record — a swim nobody
+ * measured, a route nobody timed — so this asks for one of the two, not both.
+ */
+private fun measured(distanceMeters: Long?, durationSeconds: Long?): Pair<Long?, Long?>? {
+    val distance = distanceMeters?.takeIf { it > 0L }
+    val duration = durationSeconds?.takeIf { it > 0L }
+    return if (distance == null && duration == null) null else distance to duration
 }
 
 /**
@@ -211,9 +200,9 @@ class ObserveGroupVolumeUseCase(
  * arbitrary weeks, including future ones. A "last N days" shape could not express
  * the week the user is actually looking at.
  */
-class ObserveActivityVolumeUseCase(private val workouts: WorkoutRepository) {
-    operator fun invoke(fromEpochDay: Long, toEpochDay: Long): Flow<List<ActivityVolume>> =
-        workouts.observeVolumePerActivity(fromEpochDay, toEpochDay)
+class ObserveCategoryVolumeUseCase(private val workouts: WorkoutRepository) {
+    operator fun invoke(fromEpochDay: Long, toEpochDay: Long): Flow<List<CategoryVolume>> =
+        workouts.observeVolumePerCategory(fromEpochDay, toEpochDay)
 }
 
 /** Volume per individual muscle over a window. */
@@ -266,6 +255,23 @@ class ObserveSessionDaysUseCase(private val workouts: WorkoutRepository) {
  * evening — so this is a list, not the single "current session" the screen used to
  * assume.
  */
+/**
+ * One log, with its category resolved — what the entry screen opens on.
+ *
+ * Emits null when the session is gone, which is a state the screen has to handle: the
+ * day's list can delete a log while its form is open behind it.
+ */
+class ObserveSessionSummaryUseCase(private val workouts: WorkoutRepository) {
+    operator fun invoke(sessionId: Long): Flow<SessionSummary?> =
+        workouts.observeSessionSummary(sessionId)
+}
+
+/** The muscles worked in each of a day's logs, for the cards to list. */
+class ObserveDayMusclesUseCase(private val workouts: WorkoutRepository) {
+    operator fun invoke(epochDay: Long): Flow<Map<Long, List<String>>> =
+        workouts.observeDayMuscles(epochDay)
+}
+
 class ObserveDayLogUseCase(private val workouts: WorkoutRepository) {
     operator fun invoke(epochDay: Long): Flow<List<SessionSummary>> =
         workouts.observeDaySummaries(epochDay)
@@ -304,9 +310,9 @@ class ObserveTrainedDaysUseCase(
     private val workouts: WorkoutRepository,
     private val clock: Clock,
 ) {
-    operator fun invoke(activityId: Long, windowDays: Long = 28): Flow<List<Long>> {
+    operator fun invoke(categoryId: Long, windowDays: Long = 28): Flow<List<Long>> {
         val today = clock.today()
-        return workouts.observeTrainedDays(activityId, today - windowDays + 1, today)
+        return workouts.observeTrainedDays(categoryId, today - windowDays + 1, today)
     }
 }
 

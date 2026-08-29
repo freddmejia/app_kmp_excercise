@@ -15,20 +15,24 @@ import botix.dev.myweeklyroutinegymapp.db.Activity_category as ActivityCategoryE
 internal fun ActivityCategoryEntity.toDomain(): ActivityCategory = ActivityCategory(
     id = id,
     name = name,
+    measurementType = measurement_type,
     icon = icon,
     color = color,
     isArchived = is_archived,
     createdAt = created_at,
+    seedKey = seed_key,
 )
 
 internal fun SelectActiveWithUsage.toDomain(): ActivityCategoryUsage = ActivityCategoryUsage(
     category = ActivityCategory(
         id = id,
         name = name,
+        measurementType = measurement_type,
         icon = icon,
         color = color,
         isArchived = is_archived,
         createdAt = created_at,
+        seedKey = seed_key,
     ),
-    activityCount = activity_count,
+    sessionCount = session_count,
 )

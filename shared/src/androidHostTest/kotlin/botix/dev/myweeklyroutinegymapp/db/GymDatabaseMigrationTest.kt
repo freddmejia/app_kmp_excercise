@@ -102,7 +102,7 @@ class GymDatabaseMigrationTest {
         // Guards the migration files' existence. Each .sqm adds one; delete one and
         // this drops back, every installed app keeps its old database, never creates
         // the new table, and crashes on the first query against it.
-        assertEquals(5L, GymDatabase.Schema.version)
+        assertEquals(7L, GymDatabase.Schema.version)
     }
 
     @Test
@@ -117,14 +117,17 @@ class GymDatabaseMigrationTest {
 
         GymDatabase.Schema.migrate(migrated, 3, 4)
 
-        // Same columns as a fresh install: nothing after step 4 touches this table.
-        assertEquals(fresh.columnsOf("workout_session"), migrated.columnsOf("workout_session"))
+        // The two columns this step is about, present and named.
+        val afterStepFour = migrated.columnsOf("workout_session")
+        assertTrue(afterStepFour.contains("distance_meters"))
+        assertTrue(afterStepFour.contains("duration_seconds"))
+        // Still keyed by activity here; step 7 rebuilds the table around a category.
+        assertTrue(afterStepFour.contains("activity_id"))
 
-        // And the two paths converge once the remaining steps have run. Compared
-        // against Schema.version rather than a literal so that adding a migration
-        // extends this test instead of breaking it.
+        // And the two paths converge once the remaining steps have run.
         GymDatabase.Schema.migrate(migrated, 4, GymDatabase.Schema.version)
         assertEquals(fresh.tableNames(), migrated.tableNames())
+        assertEquals(fresh.columnsOf("workout_session"), migrated.columnsOf("workout_session"))
     }
 
     @Test
@@ -153,8 +156,16 @@ class GymDatabaseMigrationTest {
         assertNull(stored.duration_seconds)
     }
 
+    /**
+     * Step 1 -> 2, pinned at 2 rather than at the current version.
+     *
+     * `activity` no longer exists at head — 6.sqm drops it — so this reads the table
+     * through raw SQL at the version that still has it. The step is still worth a
+     * test: it is the one that put a REFERENCES clause on an ADD COLUMN, which SQLite
+     * only permits because the column defaults to NULL.
+     */
     @Test
-    fun existingActivitiesSurviveTheMigrationAsUncategorised() {
+    fun existingActivitiesSurviveStepTwoAsUncategorised() {
         val driver = v1Database()
         driver.execute(
             null,
@@ -163,15 +174,12 @@ class GymDatabaseMigrationTest {
             0,
         )
 
-        GymDatabase.Schema.migrate(driver, 1, GymDatabase.Schema.version)
+        GymDatabase.Schema.migrate(driver, 1, 2)
 
-        val stored = createDatabase(driver).activityQueries.selectAll().executeAsOne()
-        assertEquals("Gym", stored.name)
-        assertEquals(MeasurementType.STRENGTH, stored.measurement_type)
-        assertEquals(5L, stored.created_at)
-        // The added column defaults to NULL, which is what lets SQLite attach a
-        // REFERENCES clause in ALTER TABLE at all.
-        assertNull(stored.category_id)
+        assertEquals("Gym", driver.scalar("SELECT name FROM activity"))
+        assertEquals("STRENGTH", driver.scalar("SELECT measurement_type FROM activity"))
+        assertEquals("5", driver.scalar("SELECT created_at FROM activity"))
+        assertNull(driver.scalar("SELECT category_id FROM activity"))
     }
 
     @Test
@@ -187,15 +195,17 @@ class GymDatabaseMigrationTest {
         GymDatabase.Schema.migrate(driver, 1, GymDatabase.Schema.version)
         val db = createDatabase(driver)
 
-        // Exercises the new table, the new column and the join between them — if the
-        // migration DDL had drifted from ActivityCategory.sq, one of these fails.
-        db.activityCategoryQueries.insert("Cardio", "🏃", null, 0L)
+        // Exercises the table, its columns and the join to what now references it — if
+        // the migration DDL had drifted from ActivityCategory.sq, one of these fails.
+        db.activityCategoryQueries.insert("Cardio", "🏃", null, 0L, MeasurementType.STRENGTH)
         val categoryId = db.activityCategoryQueries.lastInsertRowId().executeAsOne()
-        db.activityQueries.setCategory(categoryId, 1L)
+        db.workoutSessionQueries.insertSession(categoryId, 20_000L, null, 0L)
 
         val usage = db.activityCategoryQueries.selectActiveWithUsage().executeAsOne()
         assertEquals("Cardio", usage.name)
-        assertEquals(1L, usage.activity_count)
+        // Logs, not activities: the count followed the thing that references a
+        // category when activities stopped existing.
+        assertEquals(1L, usage.session_count)
 
         // The unique-name index arrived with the migration too, not just the table.
         assertTrue(db.activityCategoryQueries.countActiveWithName("Cardio", 0L).executeAsOne() > 0)
@@ -216,51 +226,25 @@ class GymDatabaseMigrationTest {
     }
 
     @Test
-    fun theMigratedDatabaseSupportsTheActivityMuscleLink() {
-        val driver = v1Database()
-        driver.execute(
-            null,
-            "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
-                "VALUES ('Gym', 'STRENGTH', NULL, NULL, 0, 0, 0)",
-            0,
-        )
-
-        GymDatabase.Schema.migrate(driver, 1, GymDatabase.Schema.version)
-        val db = createDatabase(driver)
-
-        // The 2 -> 3 step only creates a table, so the check is that it exists and
-        // joins correctly to rows that predate it.
-        db.muscleCatalogQueries.insertGroup("Chest", 0L)
-        db.muscleCatalogQueries.insertMuscle(1L, "Upper chest", 0L)
-        db.activityMuscleQueries.insertLink(1L, 1L)
-
-        val scoped = db.activityMuscleQueries.selectPickerForActivity(1L).executeAsOne()
-        assertEquals("Upper chest", scoped.name)
-        assertEquals("Chest", scoped.group_name)
-
-        // Composite primary key survived the migration: relinking must not duplicate.
-        db.activityMuscleQueries.insertLink(1L, 1L)
-        assertEquals(1, db.activityMuscleQueries.selectAllLinks().executeAsList().size)
-    }
-
-    @Test
     fun migratingFromVersionTwoAddsOnlyTheLinkTable() {
         // The upgrade path for anyone who already installed the categories build.
         val fresh = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         GymDatabase.Schema.create(fresh)
-        assertTrue(fresh.tableNames().contains("activity_muscle"))
+        // Not on a fresh install any more: step 7 drops it again. This test is about
+        // the window between 3 and 7 in which it exists.
+        assertTrue(!fresh.tableNames().contains("activity_muscle"))
 
         val migrated = v1Database()
         GymDatabase.Schema.migrate(migrated, 1, 2)
         assertTrue(!migrated.tableNames().contains("activity_muscle"))
 
         GymDatabase.Schema.migrate(migrated, 2, 3)
+        // The link table arrives at step 3 and is dropped again at step 7, so this is
+        // the only window in which it exists at all.
         assertTrue(migrated.tableNames().contains("activity_muscle"))
 
-        // Full convergence only once every later step has run too — step 5 adds a
-        // table of its own. Keyed off Schema.version so a new migration extends this
-        // rather than breaking it.
         GymDatabase.Schema.migrate(migrated, 3, GymDatabase.Schema.version)
+        assertTrue(!migrated.tableNames().contains("activity_muscle"))
         assertEquals(fresh.tableNames(), migrated.tableNames())
     }
 
@@ -278,9 +262,301 @@ class GymDatabaseMigrationTest {
 
         GymDatabase.Schema.migrate(migrated, 4, 5)
 
-        assertEquals(fresh.tableNames(), migrated.tableNames())
         assertEquals(fresh.columnsOf("muscle"), migrated.columnsOf("muscle"))
         assertEquals(fresh.columnsOf("muscle_group"), migrated.columnsOf("muscle_group"))
+        assertTrue(migrated.tableNames().contains("muscle_seed"))
+
+        // Table parity only once the later steps have run — step 6 adds one of its
+        // own. Keyed off Schema.version so a new migration extends this test.
+        GymDatabase.Schema.migrate(migrated, 5, GymDatabase.Schema.version)
+        assertEquals(fresh.tableNames(), migrated.tableNames())
+    }
+
+    @Test
+    fun migratingFromVersionFiveMovesMeasurementOntoTheCategory() {
+        val fresh = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        GymDatabase.Schema.create(fresh)
+
+        val migrated = v1Database()
+        GymDatabase.Schema.migrate(migrated, 1, 5)
+        assertTrue(!migrated.columnsOf("activity_category").contains("measurement_type"))
+
+        GymDatabase.Schema.migrate(migrated, 5, 6)
+        assertTrue(migrated.columnsOf("activity_category").contains("measurement_type"))
+
+        // Table parity only at the end: step 7 drops two of its own.
+        GymDatabase.Schema.migrate(migrated, 6, GymDatabase.Schema.version)
+        assertEquals(fresh.tableNames(), migrated.tableNames())
+        assertEquals(
+            fresh.columnsOf("activity_category"),
+            migrated.columnsOf("activity_category"),
+        )
+    }
+
+    @Test
+    fun aCategoryInheritsTheMeasurementOfItsActivities() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('Running', 'DISTANCE_TIME', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('Cycling', 'DISTANCE_TIME', NULL, NULL, 0, 0, 0)", 0)
+
+        // The category table only exists from version 2, so it is filled between the
+        // steps rather than in v1Database().
+        GymDatabase.Schema.migrate(driver, 1, 5)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at) " +
+            "VALUES ('Cardio', NULL, NULL, 0, 0)", 0)
+        driver.execute(null, "UPDATE activity SET category_id = 1", 0)
+
+        GymDatabase.Schema.migrate(driver, 5, 6)
+        val db = createDatabase(driver)
+
+        // Two distance activities, so the category is a distance category. Nothing was
+        // split: there was nothing to disagree with.
+        val categories = db.activityCategoryQueries.selectAll().executeAsList()
+        assertEquals(1, categories.size)
+        assertEquals(MeasurementType.DISTANCE_TIME, categories.single().measurement_type)
+        // Read raw: `activity` still exists at 6 and is dropped at 7.
+        assertEquals("2", driver.scalar("SELECT COUNT(*) FROM activity WHERE category_id = 1"))
+    }
+
+    @Test
+    fun aCategoryHoldingBothKindsSplitsRatherThanLying() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('Running', 'DISTANCE_TIME', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('Cycling', 'DISTANCE_TIME', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('Bench press', 'STRENGTH', NULL, NULL, 0, 0, 0)", 0)
+
+        GymDatabase.Schema.migrate(driver, 1, 5)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at) " +
+            "VALUES ('Everything', '🏃', NULL, 0, 42)", 0)
+        driver.execute(null, "UPDATE activity SET category_id = 1", 0)
+
+        GymDatabase.Schema.migrate(driver, 5, 6)
+        val db = createDatabase(driver)
+
+        val byName = db.activityCategoryQueries.selectAll().executeAsList().associateBy { it.name }
+        assertEquals(2, byName.size)
+        // The majority kind keeps the original row, and with it the original id that
+        // nothing else has to be told about.
+        assertEquals(MeasurementType.DISTANCE_TIME, byName.getValue("Everything").measurement_type)
+        assertEquals(1L, byName.getValue("Everything").id)
+
+        // The minority moves to a copy carrying the original's icon and created_at —
+        // the same label with a different contract, not a new category.
+        val split = byName.getValue("Everything · STRENGTH")
+        assertEquals(MeasurementType.STRENGTH, split.measurement_type)
+        assertEquals("🏃", split.icon)
+        assertEquals(42L, split.created_at)
+
+        assertEquals("1", driver.scalar("SELECT category_id FROM activity WHERE name = 'Running'"))
+        assertEquals("1", driver.scalar("SELECT category_id FROM activity WHERE name = 'Cycling'"))
+        assertEquals(
+            split.id.toString(),
+            driver.scalar("SELECT category_id FROM activity WHERE name = 'Bench press'"),
+        )
+
+        // No activity's own measurement type was rewritten: the split is about where
+        // they are filed, never about what they are.
+        assertEquals(
+            "STRENGTH",
+            driver.scalar("SELECT measurement_type FROM activity WHERE name = 'Bench press'"),
+        )
+    }
+
+    /**
+     * The rebuild in 6.sqm, run with foreign keys **on**.
+     *
+     * That is the condition it exists for. iOS enforces them, and with enforcement on
+     * a `DROP TABLE` performs an implicit `DELETE FROM` first — so a rebuild in the
+     * wrong order cascades through `session_muscle` and deletes every set ever
+     * logged, silently and irreversibly. The JDBC driver has them off by default, so
+     * without this line the test would pass on a mistake that destroys the user's
+     * history on their phone.
+     */
+    private fun v6WithForeignKeys(): JdbcSqliteDriver {
+        val driver = v1Database()
+        GymDatabase.Schema.migrate(driver, 1, 6)
+        driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
+        return driver
+    }
+
+    @Test
+    fun everySetSurvivesTheRebuildWithForeignKeysOn() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('chest day', 'STRENGTH', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO muscle_group (name, is_archived, created_at) VALUES ('Chest', 0, 0)", 0)
+        driver.execute(null, "INSERT INTO muscle (group_id, name, is_archived, created_at) VALUES (1, 'Upper chest', 0, 0)", 0)
+        driver.execute(null, "INSERT INTO muscle (group_id, name, is_archived, created_at) VALUES (1, 'Lower chest', 0, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) " +
+            "VALUES (1, 20000, 'a note', 5)", 0)
+        driver.execute(null, "INSERT INTO session_muscle (session_id, muscle_id, effective_sets, warmup_sets) " +
+            "VALUES (1, 1, 4, 1)", 0)
+        driver.execute(null, "INSERT INTO session_muscle (session_id, muscle_id, effective_sets, warmup_sets) " +
+            "VALUES (1, 2, 3, 0)", 0)
+
+        GymDatabase.Schema.migrate(driver, 1, 6)
+        driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
+        GymDatabase.Schema.migrate(driver, 6, 7)
+
+        val db = createDatabase(driver)
+
+        // The sets are the whole point. Two rows in, two rows out, same numbers.
+        val entries = db.workoutSessionQueries.selectEntriesForSession(1L).executeAsList()
+        assertEquals(2, entries.size)
+        assertEquals(listOf(3L, 4L), entries.map { it.effective_sets }.sorted())
+        assertEquals(1L, entries.sumOf { it.warmup_sets })
+
+        // And the session kept everything about itself except the activity.
+        val summary = db.workoutSessionQueries.selectDaySummaries(20_000L).executeAsOne()
+        assertEquals(1L, summary.id)
+        assertEquals("a note", summary.notes)
+        assertEquals(7L, summary.effective_sets)
+        assertEquals(2L, summary.muscle_count)
+    }
+
+    @Test
+    fun theActivityTablesAreGone() {
+        val driver = v6WithForeignKeys()
+        assertTrue(driver.tableNames().contains("activity"))
+        assertTrue(driver.tableNames().contains("activity_muscle"))
+
+        GymDatabase.Schema.migrate(driver, 6, 7)
+
+        val names = driver.tableNames()
+        assertTrue(!names.contains("activity"))
+        assertTrue(!names.contains("activity_muscle"))
+        // The scaffolding the rebuild used must not outlive it.
+        assertTrue(!names.contains("workout_session_new"))
+        assertTrue(!names.contains("session_muscle_tmp"))
+
+        val fresh = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        GymDatabase.Schema.create(fresh)
+        assertEquals(fresh.tableNames(), names)
+        assertEquals(fresh.columnsOf("workout_session"), driver.columnsOf("workout_session"))
+        assertEquals(fresh.columnsOf("session_muscle"), driver.columnsOf("session_muscle"))
+    }
+
+    @Test
+    fun aSessionTakesTheCategoryItsActivityWasFiledUnder() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('morning ride', 'DISTANCE_TIME', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) " +
+            "VALUES (1, 20000, NULL, 0)", 0)
+
+        GymDatabase.Schema.migrate(driver, 1, 6)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type, seed_key) " +
+            "VALUES ('Bicycle', NULL, NULL, 0, 0, 'DISTANCE_TIME', 'bicycle')", 0)
+        driver.execute(null, "UPDATE activity SET category_id = 1", 0)
+        driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
+
+        GymDatabase.Schema.migrate(driver, 6, 7)
+        val db = createDatabase(driver)
+
+        val summary = db.workoutSessionQueries.selectDaySummaries(20_000L).executeAsOne()
+        assertEquals(1L, summary.category_id)
+        assertEquals("Bicycle", summary.category_name)
+        assertEquals(MeasurementType.DISTANCE_TIME, summary.measurement_type)
+    }
+
+    @Test
+    fun anUncategorisedSessionIsMatchedByWhatItMeasures() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('chest day', 'STRENGTH', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('ride', 'DISTANCE_TIME', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) VALUES (1, 20000, NULL, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) VALUES (2, 20000, NULL, 1)", 0)
+
+        GymDatabase.Schema.migrate(driver, 1, 6)
+        // A user-made distance category first, so id order alone would pick it — the
+        // seeded one has to win on `seed_key IS NULL`, not on being inserted earlier.
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type, seed_key) " +
+            "VALUES ('my cardio', NULL, NULL, 0, 0, 'DISTANCE_TIME', NULL)", 0)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type, seed_key) " +
+            "VALUES ('Gym', NULL, NULL, 0, 0, 'STRENGTH', 'gym')", 0)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type, seed_key) " +
+            "VALUES ('Bicycle', NULL, NULL, 0, 0, 'DISTANCE_TIME', 'bicycle')", 0)
+        driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
+
+        GymDatabase.Schema.migrate(driver, 6, 7)
+        val db = createDatabase(driver)
+
+        val byId = db.workoutSessionQueries.selectDaySummaries(20_000L).executeAsList().associateBy { it.id }
+        assertEquals("Gym", byId.getValue(1L).category_name)
+        assertEquals("Bicycle", byId.getValue(2L).category_name)
+    }
+
+    @Test
+    fun aSessionWithNowhereToGoKeepsItsSetsAndLosesOnlyItsLabel() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('chest day', 'STRENGTH', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO muscle_group (name, is_archived, created_at) VALUES ('Chest', 0, 0)", 0)
+        driver.execute(null, "INSERT INTO muscle (group_id, name, is_archived, created_at) VALUES (1, 'Upper chest', 0, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) VALUES (1, 20000, NULL, 0)", 0)
+        driver.execute(null, "INSERT INTO session_muscle (session_id, muscle_id, effective_sets, warmup_sets) VALUES (1, 1, 5, 0)", 0)
+
+        // No categories at all: the user deleted the shipped ones, and the ledger says
+        // they stay deleted. The migration must not invent one to point at.
+        GymDatabase.Schema.migrate(driver, 1, 6)
+        driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
+        GymDatabase.Schema.migrate(driver, 6, 7)
+        val db = createDatabase(driver)
+
+        val summary = db.workoutSessionQueries.selectDaySummaries(20_000L).executeAsOne()
+        assertNull(summary.category_id)
+        assertNull(summary.category_name)
+        // Losing the label is survivable. Losing the training is not.
+        assertEquals(5L, summary.effective_sets)
+    }
+
+    @Test
+    fun twoLogsOfTheSameKindOnOneDayBothSurvive() {
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('morning', 'STRENGTH', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO activity (name, measurement_type, icon, color, is_archived, is_seed, created_at) " +
+            "VALUES ('evening', 'STRENGTH', NULL, NULL, 0, 0, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) VALUES (1, 20000, NULL, 0)", 0)
+        driver.execute(null, "INSERT INTO workout_session (activity_id, date_epoch_day, notes, created_at) VALUES (2, 20000, NULL, 1)", 0)
+
+        GymDatabase.Schema.migrate(driver, 1, 6)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type, seed_key) " +
+            "VALUES ('Gym', NULL, NULL, 0, 0, 'STRENGTH', 'gym')", 0)
+        driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
+        GymDatabase.Schema.migrate(driver, 6, 7)
+        val db = createDatabase(driver)
+
+        // Both map to Gym and neither is merged away: a day holds as many logs of a
+        // kind as were recorded.
+        val summaries = db.workoutSessionQueries.selectDaySummaries(20_000L).executeAsList()
+        assertEquals(2, summaries.size)
+        assertTrue(summaries.all { it.category_name == "Gym" })
+    }
+
+    @Test
+    fun anEmptyCategorySurvivesTheMoveWithADefault() {
+        val driver = v1Database()
+        GymDatabase.Schema.migrate(driver, 1, 5)
+        driver.execute(null, "INSERT INTO activity_category (name, icon, color, is_archived, created_at) " +
+            "VALUES ('gym', NULL, NULL, 0, 0)", 0)
+
+        GymDatabase.Schema.migrate(driver, 5, GymDatabase.Schema.version)
+        val db = createDatabase(driver)
+
+        // Nothing to inherit from. It keeps the column default rather than blocking
+        // the upgrade, and reads as the user's own row — no seed key.
+        val category = db.activityCategoryQueries.selectAll().executeAsList().single()
+        assertEquals("gym", category.name)
+        assertEquals(MeasurementType.STRENGTH, category.measurement_type)
+        assertNull(category.seed_key)
     }
 
     @Test
@@ -306,6 +582,24 @@ class GymDatabaseMigrationTest {
         // And the ledger starts empty, so the seed still has everything to insert.
         assertTrue(db.muscleCatalogQueries.selectAppliedSeedKeys().executeAsList().isEmpty())
     }
+
+    /**
+     * One value, as text, straight off the driver.
+     *
+     * Needed because several of these tests read tables that exist only at the schema
+     * version they are pinned to — `activity` is dropped at 7 — so the generated
+     * queries, which describe the *current* schema, cannot see them at all.
+     */
+    private fun JdbcSqliteDriver.scalar(sql: String): String? = executeQuery(
+        identifier = null,
+        sql = sql,
+        parameters = 0,
+        mapper = { cursor ->
+            app.cash.sqldelight.db.QueryResult.Value(
+                if (cursor.next().value) cursor.getString(0) else null,
+            )
+        },
+    ).value
 
     private fun JdbcSqliteDriver.tableNames(): List<String> = executeQuery(
         identifier = null,

@@ -1,18 +1,41 @@
+import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType;
 import kotlin.Boolean;
 
--- User-editable grouping for the activity catalogue: "Cardio", "Running", "Mobility".
+-- The kind of training a session is: "Gym", "Swim", "Bicycle".
 --
--- Deliberately NOT a second `measurement_type`. That enum is a contract that decides
--- which logging form applies and which metrics exist downstream, so it is closed in
--- code at three values. A category is pure organisation: it feeds no metric and
--- constrains no form, which is exactly why it can be free-form data the user owns.
+-- ### It carries the measurement type, and that is a reversal
+-- This file used to insist a category was "deliberately NOT a second
+-- measurement_type" — free-form organisation, orthogonal to how a thing is measured.
+-- The reasoning was sound and the result was not: creating an activity meant naming
+-- it, saying how it is measured, and filing it under a label that usually meant the
+-- same thing as the measurement. "Running" the category and DISTANCE_TIME the type
+-- were two ways of saying one thing, and the user had to say both.
+--
+-- Picking the category is now how you say what you did, and the logging form follows
+-- from it. The type is still a closed enum decided in code — what changed is that the
+-- user picks it by picking a category rather than choosing from a second list.
+--
+-- The activity keeps a `measurement_type` of its own; the category decides it at
+-- creation and refile time. See 5.sqm for why both exist.
 CREATE TABLE activity_category (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL,
-    icon        TEXT,
-    color       TEXT,
-    is_archived INTEGER AS Boolean NOT NULL DEFAULT 0,
-    created_at  INTEGER NOT NULL
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    name             TEXT NOT NULL,
+    icon             TEXT,
+    color            TEXT,
+    is_archived      INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at       INTEGER NOT NULL,
+    measurement_type TEXT AS MeasurementType NOT NULL DEFAULT 'STRENGTH',
+    -- Set on the categories the app ships, null on the user's own. Same rules as
+    -- muscle.seed_key: renaming clears it, and category_seed remembers deletions.
+    seed_key         TEXT
+);
+
+CREATE UNIQUE INDEX activity_category_seed_key_unique ON activity_category(seed_key)
+    WHERE seed_key IS NOT NULL;
+
+CREATE TABLE category_seed (
+    seed_key   TEXT NOT NULL PRIMARY KEY,
+    applied_at INTEGER NOT NULL
 );
 
 -- Same rule as `activity`: unique among non-archived rows, so two active "Cardio"
@@ -34,21 +57,26 @@ SELECT * FROM activity_category WHERE is_archived = 1 ORDER BY name ASC;
 selectById:
 SELECT * FROM activity_category WHERE id = ?;
 
--- Management list: every category with how many activities sit in it. LEFT JOIN so
--- an empty category still appears — it is the one you most likely want to rename or
--- delete, and an INNER JOIN would hide it.
+-- Management list: every category with how many logs have been recorded under it.
+--
+-- It counted activities until activities stopped existing (6.sqm). Sessions are the
+-- better number anyway: "12 logs" says whether a category is in use, where "2
+-- activities" only said how much setup had been done.
+--
+-- LEFT JOIN so a category nothing has been logged under still appears — it is the one
+-- you most likely want to rename or delete, and an INNER JOIN would hide it.
 selectActiveWithUsage:
-SELECT c.*, COUNT(a.id) AS activity_count
+SELECT c.*, COUNT(ws.id) AS session_count
 FROM activity_category c
-LEFT JOIN activity a ON a.category_id = c.id AND a.is_archived = 0
+LEFT JOIN workout_session ws ON ws.category_id = c.id
 WHERE c.is_archived = 0
 GROUP BY c.id
 ORDER BY c.name ASC;
 
--- How many activities a delete would leave uncategorised. Read *before* deleting:
+-- How many logs a delete would strip the label from. Read *before* deleting:
 -- ON DELETE SET NULL means the count is zero once the row is gone.
-countActivitiesIn:
-SELECT COUNT(*) FROM activity WHERE category_id = ?;
+countSessionsIn:
+SELECT COUNT(*) FROM workout_session WHERE category_id = ?;
 
 -- Lets the create/rename form report "name already in use" as a field error instead
 -- of letting the unique index throw at insert time.
@@ -57,22 +85,43 @@ SELECT COUNT(*) FROM activity_category
 WHERE is_archived = 0 AND name = :name AND id != :excludingId;
 
 insert:
-INSERT INTO activity_category (name, icon, color, is_archived, created_at)
-VALUES (?, ?, ?, 0, ?);
+INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type)
+VALUES (?, ?, ?, 0, ?, ?);
 
+-- Clears seed_key: an edited shipped category is the user's, and the language sync
+-- must not rewrite the name they chose. Same rule as renameMuscle.
 updateIdentity:
-UPDATE activity_category SET name = ?, icon = ?, color = ? WHERE id = ?;
+UPDATE activity_category SET name = ?, icon = ?, color = ?, measurement_type = ?, seed_key = NULL
+WHERE id = ?;
+
+-- ---------- the shipped categories ----------
+
+insertSeededCategory:
+INSERT INTO activity_category (name, icon, color, is_archived, created_at, measurement_type, seed_key)
+VALUES (?, ?, NULL, 0, ?, ?, ?);
+
+selectCategoryBySeedKey:
+SELECT id, name FROM activity_category WHERE seed_key = ?;
+
+renameSeededCategory:
+UPDATE activity_category SET name = ? WHERE seed_key = ?;
+
+selectAppliedSeedKeys:
+SELECT seed_key FROM category_seed;
+
+markSeedApplied:
+INSERT OR IGNORE INTO category_seed (seed_key, applied_at) VALUES (?, ?);
 
 setArchived:
 UPDATE activity_category SET is_archived = ? WHERE id = ?;
 
--- Unrestricted, unlike `activity` and `muscle`.
+-- Unrestricted, unlike `muscle`.
 --
--- Those two refuse a hard delete because sessions reference them and past metrics
--- would break. Nothing references a category except the activities' own label, and
--- ON DELETE SET NULL turns those rows into uncategorised activities rather than
--- orphans. The criterion is the same as everywhere else — protect history — and here
--- there is no history to protect.
+-- A muscle refuses a hard delete because sessions record sets *against* it and the
+-- volume would be orphaned. A category is only the label on a session: ON DELETE SET
+-- NULL strips it and every set, day and distance under it survives, rendered with a
+-- fallback name. The criterion is the same as everywhere else — protect history — and
+-- here the history is not the thing being deleted.
 deleteById:
 DELETE FROM activity_category WHERE id = ?;
 

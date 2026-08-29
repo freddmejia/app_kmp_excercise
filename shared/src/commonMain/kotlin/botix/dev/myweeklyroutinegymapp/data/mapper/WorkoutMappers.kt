@@ -2,15 +2,17 @@ package botix.dev.myweeklyroutinegymapp.data.mapper
 
 import botix.dev.myweeklyroutinegymapp.db.DailyVolumeForMuscle
 import botix.dev.myweeklyroutinegymapp.db.SelectDaySummaries
+import botix.dev.myweeklyroutinegymapp.db.SelectSessionDetailById
 import botix.dev.myweeklyroutinegymapp.db.SelectEntriesForSession
 import botix.dev.myweeklyroutinegymapp.db.UntrainedMusclesInRange
-import botix.dev.myweeklyroutinegymapp.db.VolumePerActivityInRange
+import botix.dev.myweeklyroutinegymapp.db.VolumePerCategoryInRange
 import botix.dev.myweeklyroutinegymapp.db.VolumePerGroupInRange
 import botix.dev.myweeklyroutinegymapp.db.VolumePerMuscleInRange
 import botix.dev.myweeklyroutinegymapp.db.Workout_session
-import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.CategoryVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.DailyVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
@@ -21,7 +23,7 @@ import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals as SessionTota
 
 internal fun Workout_session.toDomain(): WorkoutSession = WorkoutSession(
     id = id,
-    activityId = activity_id,
+    categoryId = category_id,
     epochDay = date_epoch_day,
     notes = notes,
     createdAt = created_at,
@@ -78,8 +80,12 @@ internal fun DailyVolumeForMuscle.toDomain(): DailyVolume = DailyVolume(
 
 internal fun SelectDaySummaries.toDomain(): SessionSummary = SessionSummary(
     sessionId = id,
-    activityId = activity_id,
-    activityName = activity_name,
+    categoryId = category_id,
+    categoryName = category_name,
+    // The query LEFT JOINs the category, so this is null for a log whose category was
+    // deleted. Strength is the fallback because it is the form with a picker behind
+    // it — the one an orphan can still be opened and corrected in.
+    measurementType = measurement_type ?: MeasurementType.STRENGTH,
     epochDay = date_epoch_day,
     notes = notes,
     effectiveSets = effective_sets,
@@ -89,12 +95,31 @@ internal fun SelectDaySummaries.toDomain(): SessionSummary = SessionSummary(
     durationSeconds = duration_seconds,
 )
 
-internal fun VolumePerActivityInRange.toDomain(): ActivityVolume = ActivityVolume(
-    activityId = activity_id,
+internal fun VolumePerCategoryInRange.toDomain(): CategoryVolume = CategoryVolume(
+    categoryId = category_id,
     effectiveSets = effective_sets,
     warmupSets = warmup_sets,
     distinctDays = distinct_days,
     sessionCount = session_count,
+    distanceMeters = distance_meters,
+    durationSeconds = duration_seconds,
+)
+
+/**
+ * The single-session read. Same columns as [SelectDaySummaries] minus the totals,
+ * which the entry screen gets from the session detail instead — so the two agree
+ * about what a session *is* without either recomputing the other's numbers.
+ */
+internal fun SelectSessionDetailById.toDomain(): SessionSummary = SessionSummary(
+    sessionId = id,
+    categoryId = category_id,
+    categoryName = category_name,
+    measurementType = measurement_type ?: MeasurementType.STRENGTH,
+    epochDay = date_epoch_day,
+    notes = notes,
+    effectiveSets = 0,
+    warmupSets = 0,
+    muscleCount = 0,
     distanceMeters = distance_meters,
     durationSeconds = duration_seconds,
 )

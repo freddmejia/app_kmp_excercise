@@ -1,14 +1,16 @@
 package botix.dev.myweeklyroutinegymapp.domain
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
+import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.db.GymDatabase
 import botix.dev.myweeklyroutinegymapp.db.createDatabase
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogDistanceTimeResult
-import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.LogDistanceTimeUseCase
-import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveActivityVolumeUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetSessionDistanceTimeUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartSessionResult
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartSessionUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveCategoryVolumeUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.ObserveDayLogUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -47,22 +49,41 @@ class DistanceTimeLoggingTest {
         override fun nowMillis(): Long = 0L
     }
 
-    private fun logger(db: GymDatabase) = LogDistanceTimeUseCase(
+    private fun starter(db: GymDatabase) = StartSessionUseCase(
         workouts = WorkoutRepositoryImpl(db, dispatcher),
-        activities = ActivityRepositoryImpl(db, dispatcher),
+        categories = ActivityCategoryRepositoryImpl(db, dispatcher),
         clock = FixedClock(today),
     )
 
-    private suspend fun activity(db: GymDatabase, name: String, type: MeasurementType): Long =
-        ActivityRepositoryImpl(db, dispatcher).create(name, type, createdAt = 0L)
+    private fun setter(db: GymDatabase) =
+        SetSessionDistanceTimeUseCase(WorkoutRepositoryImpl(db, dispatcher))
+
+    private suspend fun category(db: GymDatabase, name: String, type: MeasurementType): Long =
+        ActivityCategoryRepositoryImpl(db, dispatcher).create(name, type, createdAt = 0L)
+
+    /**
+     * The two steps the flow actually takes: New log creates the row, the form fills
+     * it in. They were one call while a distance log created its own session; they are
+     * two now, so that reopening a ride to fix a number corrects it rather than adding
+     * a second ride to the day.
+     */
+    private suspend fun logRide(
+        db: GymDatabase,
+        categoryId: Long,
+        distanceMeters: Long?,
+        durationSeconds: Long?,
+    ): LogDistanceTimeResult {
+        val started = starter(db)(categoryId, today) as StartSessionResult.Started
+        return setter(db)(started.sessionId, distanceMeters, durationSeconds)
+    }
 
     @Test
     fun aRideIsStoredInMetresAndSeconds() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
 
-        // 20.5 km in 45 min, as the dialog would hand it over.
-        val result = logger(database)(id, distanceMeters = 20_500, durationSeconds = 2_700)
+        // 20.5 km in 45 min, as the form would hand it over.
+        val result = logRide(database, id, distanceMeters = 20_500, durationSeconds = 2_700)
 
         assertEquals(LogDistanceTimeResult.Logged, result)
         val session = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today)
@@ -78,16 +99,16 @@ class DistanceTimeLoggingTest {
     @Test
     fun aLoggedRideCountsAsTrainedOnThatDay() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "bici 20k", MeasurementType.DISTANCE_TIME)
-        logger(database)(id, distanceMeters = 20_500, durationSeconds = 2_700)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
+        logRide(database, id, distanceMeters = 20_500, durationSeconds = 2_700)
 
-        // The exact query the Activities screen filters on: present means trained.
-        val volume = ObserveActivityVolumeUseCase(WorkoutRepositoryImpl(database, dispatcher))(
+        // The exact query a week view filters on: present means trained.
+        val volume = ObserveCategoryVolumeUseCase(WorkoutRepositoryImpl(database, dispatcher))(
             today,
             today,
         ).first().single()
 
-        assertEquals(id, volume.activityId)
+        assertEquals(id, volume.categoryId)
         assertTrue(volume.isDistanceTime)
         assertEquals(20_500L, volume.distanceMeters)
         assertEquals(2_700L, volume.durationSeconds)
@@ -97,49 +118,54 @@ class DistanceTimeLoggingTest {
     }
 
     @Test
-    fun aStrengthActivityIsNotLoggableThisWay() = runTest(dispatcher) {
+    fun aRideWithNeitherMeasureIsRefusedAndWritesNothing() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "Bench", MeasurementType.STRENGTH)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
+        val started = starter(database)(id, today) as StartSessionResult.Started
 
-        val result = logger(database)(id, distanceMeters = 5_000, durationSeconds = 600)
+        val result = setter(database)(started.sessionId, null, null)
 
-        assertEquals(LogDistanceTimeResult.NotADistanceTimeActivity, result)
-        // Refused before anything was written: a rejected log leaves no session
-        // behind to show up as a phantom entry on the day.
-        assertTrue(
-            ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today).first().isEmpty(),
-        )
+        assertEquals(LogDistanceTimeResult.NothingMeasured, result)
+        // The row exists — New log created it, deliberately and visibly — but it holds
+        // no measurements, which is what an abandoned form should leave behind.
+        val session = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today)
+            .first()
+            .single()
+        assertNull(session.distanceMeters)
+        assertNull(session.durationSeconds)
     }
 
     @Test
     fun anEmptyFormIsRefused() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
 
         assertEquals(
             LogDistanceTimeResult.NothingMeasured,
-            logger(database)(id, distanceMeters = null, durationSeconds = null),
+            logRide(database, id, distanceMeters = null, durationSeconds = null),
         )
         // Zero is "measured, and it was none", which is never what was meant.
         assertEquals(
             LogDistanceTimeResult.NothingMeasured,
-            logger(database)(id, distanceMeters = 0, durationSeconds = 0),
+            logRide(database, id, distanceMeters = 0, durationSeconds = 0),
         )
-        assertTrue(
-            ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today).first().isEmpty(),
-        )
+        // The rows exist — logRide starts one each time, as New log does — and both
+        // are empty. What "refused" protects is the *measurements*: nothing was
+        // written into either, so neither counts as a ride that happened.
+        val sessions = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today).first()
+        assertTrue(sessions.all { it.distanceMeters == null && it.durationSeconds == null })
     }
 
     @Test
     fun oneMeasureAloneIsEnough() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "Piscina", MeasurementType.DISTANCE_TIME)
+        val id = category(database, "Piscina", MeasurementType.DISTANCE_TIME)
 
         // A swim timed but not measured: a real record, and the only one available
         // to anyone whose pool length they never counted.
         assertEquals(
             LogDistanceTimeResult.Logged,
-            logger(database)(id, distanceMeters = null, durationSeconds = 1_800),
+            logRide(database, id, distanceMeters = null, durationSeconds = 1_800),
         )
 
         val session = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today)
@@ -153,17 +179,32 @@ class DistanceTimeLoggingTest {
     }
 
     @Test
-    fun loggingTheSameDayTwiceCorrectsItRatherThanStacking() = runTest(dispatcher) {
+    fun twoRidesOnOneDayAreTwoLogs() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "bici 20k", MeasurementType.DISTANCE_TIME)
-        val log = logger(database)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
 
-        log(id, distanceMeters = 20_500, durationSeconds = 2_700)
-        log(id, distanceMeters = 21_000, durationSeconds = 2_760)
+        logRide(database, id, distanceMeters = 20_500, durationSeconds = 2_700)
+        logRide(database, id, distanceMeters = 21_000, durationSeconds = 2_760)
 
         val sessions = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today).first()
-        // One session for the activity that day, matching the strength flow — the
-        // second log is a correction, not a second ride.
+        // It used to be one row corrected twice, because a distance log found-or-created
+        // by (activity, day). A morning ride and an evening ride are two rides, so New
+        // log makes a second row; correcting one means reopening *it*, which writes by
+        // session id and cannot touch the other.
+        assertEquals(2, sessions.size)
+        assertEquals(listOf(20_500L, 21_000L), sessions.map { it.distanceMeters })
+    }
+
+    @Test
+    fun reopeningARideCorrectsItRatherThanAddingOne() = runTest(dispatcher) {
+        val database = db()
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
+        val started = starter(database)(id, today) as StartSessionResult.Started
+        setter(database)(started.sessionId, 20_500, 2_700)
+
+        setter(database)(started.sessionId, 21_000, 2_760)
+
+        val sessions = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today).first()
         assertEquals(1, sessions.size)
         assertEquals(21_000L, sessions.single().distanceMeters)
         assertEquals(2_760L, sessions.single().durationSeconds)
@@ -172,8 +213,8 @@ class DistanceTimeLoggingTest {
     @Test
     fun paceIsSecondsPerKilometre() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "bici 20k", MeasurementType.DISTANCE_TIME)
-        logger(database)(id, distanceMeters = 20_000, durationSeconds = 3_600)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
+        logRide(database, id, distanceMeters = 20_000, durationSeconds = 3_600)
 
         val session = ObserveDayLogUseCase(WorkoutRepositoryImpl(database, dispatcher))(today)
             .first()
@@ -185,13 +226,15 @@ class DistanceTimeLoggingTest {
     @Test
     fun aRideOnAnotherDayDoesNotCountTowardsThisOne() = runTest(dispatcher) {
         val database = db()
-        val id = activity(database, "bici 20k", MeasurementType.DISTANCE_TIME)
-        logger(database)(id, distanceMeters = 20_500, durationSeconds = 2_700, epochDay = today - 1)
+        val id = category(database, "Bicycle", MeasurementType.DISTANCE_TIME)
+        // Yesterday, which needs the session started on that day rather than today's.
+        val yesterday = starter(database)(id, today - 1) as StartSessionResult.Started
+        setter(database)(yesterday.sessionId, 20_500, 2_700)
 
         // The day filter is the whole point of the strip: yesterday's ride must not
         // make the activity look trained today.
         assertTrue(
-            ObserveActivityVolumeUseCase(WorkoutRepositoryImpl(database, dispatcher))(today, today)
+            ObserveCategoryVolumeUseCase(WorkoutRepositoryImpl(database, dispatcher))(today, today)
                 .first()
                 .isEmpty(),
         )

@@ -8,10 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import botix.dev.myweeklyroutinegymapp.domain.model.Activity
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategory
 import botix.dev.myweeklyroutinegymapp.domain.model.ActivityCategoryUsage
-import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.CategoryVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightChart
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightEntry
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightPoint
@@ -97,85 +96,56 @@ internal fun PreviewSurface(
 
 // --- Categories -------------------------------------------------------------
 
+/**
+ * The three the app ships, which is also one of each shape it can log: sets and
+ * muscles, and distance and time twice over. A fixture holding only strength
+ * categories would let every preview of the log flow agree with itself and with
+ * nothing else.
+ */
 internal val previewCategories: List<ActivityCategory> = listOf(
-    ActivityCategory(id = 1, name = "Strength", createdAt = PREVIEW_CREATED_AT),
-    ActivityCategory(id = 2, name = "Cardio", createdAt = PREVIEW_CREATED_AT + 1),
-    ActivityCategory(id = 3, name = "Mobility", createdAt = PREVIEW_CREATED_AT + 2),
+    ActivityCategory(
+        id = 1,
+        name = "Gym",
+        measurementType = MeasurementType.STRENGTH,
+        createdAt = PREVIEW_CREATED_AT,
+        seedKey = "gym",
+    ),
+    ActivityCategory(
+        id = 2,
+        name = "Bicycle",
+        measurementType = MeasurementType.DISTANCE_TIME,
+        createdAt = PREVIEW_CREATED_AT + 1,
+        seedKey = "bicycle",
+    ),
+    // No seed key: the user's own, which is the row that can be renamed and deleted
+    // without the ledger having an opinion.
+    ActivityCategory(
+        id = 3,
+        name = "Mobility",
+        measurementType = MeasurementType.STRENGTH,
+        createdAt = PREVIEW_CREATED_AT + 2,
+    ),
 )
 
 internal val previewCategoryUsage: List<ActivityCategoryUsage> = listOf(
-    ActivityCategoryUsage(previewCategories[0], activityCount = 6),
-    ActivityCategoryUsage(previewCategories[1], activityCount = 2),
-    // Zero is the interesting row: it is the one that can be deleted without
-    // uncategorising anything, and the subtitle has to read sensibly at zero.
-    ActivityCategoryUsage(previewCategories[2], activityCount = 0),
+    ActivityCategoryUsage(previewCategories[0], sessionCount = 6),
+    ActivityCategoryUsage(previewCategories[1], sessionCount = 2),
+    // Zero is the interesting row: it is the one that can be deleted without stripping
+    // the label off anything, and the subtitle has to read sensibly at zero.
+    ActivityCategoryUsage(previewCategories[2], sessionCount = 0),
 )
 
-// --- Activities -------------------------------------------------------------
-
-/**
- * One of each measurement type, plus an archived row.
- *
- * All three types are here on purpose: the type decides which logging form opens and
- * which badge the row shows, so a fixture holding only strength activities would make
- * every preview of the list agree with itself and with nothing else.
- */
-internal val previewActivities: List<Activity> = listOf(
-    Activity(
-        id = 1,
-        name = "Push day",
-        measurementType = MeasurementType.STRENGTH,
+/** Absent means "not trained that week" — there is no zero row. */
+internal val previewCategoryVolume: Map<Long, CategoryVolume> = mapOf(
+    1L to CategoryVolume(
         categoryId = 1,
-        createdAt = PREVIEW_CREATED_AT,
-    ),
-    Activity(
-        id = 2,
-        name = "Pull day",
-        measurementType = MeasurementType.STRENGTH,
-        categoryId = 1,
-        createdAt = PREVIEW_CREATED_AT + 1,
-    ),
-    Activity(
-        id = 3,
-        name = "Morning run",
-        measurementType = MeasurementType.DISTANCE_TIME,
-        categoryId = 2,
-        createdAt = PREVIEW_CREATED_AT + 2,
-    ),
-    Activity(
-        id = 4,
-        name = "Foam rolling",
-        measurementType = MeasurementType.SIMPLE,
-        categoryId = null,
-        createdAt = PREVIEW_CREATED_AT + 3,
-    ),
-    Activity(
-        id = 5,
-        name = "Old split",
-        measurementType = MeasurementType.STRENGTH,
-        categoryId = 1,
-        isArchived = true,
-        createdAt = PREVIEW_CREATED_AT + 4,
-    ),
-)
-
-internal val previewStrengthActivity: Activity = previewActivities[0]
-internal val previewDistanceActivity: Activity = previewActivities[2]
-
-internal val previewActivitiesByCategory: List<Activity> =
-    previewActivities.filter { !it.isArchived }
-
-/** Absent means "not trained that day" — there is no zero row, so 4 of 5 are here. */
-internal val previewDayVolume: Map<Long, ActivityVolume> = mapOf(
-    1L to ActivityVolume(
-        activityId = 1,
         effectiveSets = 14,
         warmupSets = 3,
-        distinctDays = 1,
-        sessionCount = 1,
+        distinctDays = 2,
+        sessionCount = 3,
     ),
-    3L to ActivityVolume(
-        activityId = 3,
+    2L to CategoryVolume(
+        categoryId = 2,
         effectiveSets = 0,
         warmupSets = 0,
         distinctDays = 1,
@@ -183,11 +153,6 @@ internal val previewDayVolume: Map<Long, ActivityVolume> = mapOf(
         distanceMeters = 8_400,
         durationSeconds = 2_640,
     ),
-)
-
-internal val previewMusclesByActivity: Map<Long, Set<Long>> = mapOf(
-    1L to setOf(1L, 2L, 7L),
-    2L to setOf(4L, 5L),
 )
 
 // --- Muscle catalogue -------------------------------------------------------
@@ -281,7 +246,7 @@ internal val previewSessionEntries: List<SessionEntry> = listOf(
 internal val previewSessionDetail: SessionDetail = SessionDetail(
     session = WorkoutSession(
         id = 10,
-        activityId = 1,
+        categoryId = 1,
         epochDay = PREVIEW_TODAY,
         createdAt = PREVIEW_CREATED_AT,
     ),
@@ -299,38 +264,75 @@ internal val previewEmptySessionDetail: SessionDetail = SessionDetail(
     totals = SessionTotals(effectiveSets = 0, warmupSets = 0),
 )
 
-/** A strength log, a distance log and an untouched one — the three shapes of card. */
+/**
+ * Two Gym logs on one day — which is the point: a day holds as many logs of a kind as
+ * were recorded, told apart by what is in them rather than by a name.
+ */
+internal val previewStrengthSession: SessionSummary = SessionSummary(
+    sessionId = 10,
+    categoryId = 1,
+    categoryName = "Gym",
+    measurementType = MeasurementType.STRENGTH,
+    epochDay = PREVIEW_TODAY,
+    notes = "Felt strong, added a set on incline.",
+    effectiveSets = 14,
+    warmupSets = 3,
+    muscleCount = 2,
+)
+
+internal val previewDistanceSession: SessionSummary = SessionSummary(
+    sessionId = 11,
+    categoryId = 2,
+    categoryName = "Bicycle",
+    measurementType = MeasurementType.DISTANCE_TIME,
+    epochDay = PREVIEW_TODAY,
+    effectiveSets = 0,
+    warmupSets = 0,
+    muscleCount = 0,
+    distanceMeters = 8_400,
+    durationSeconds = 2_640,
+)
+
+/** The four shapes of card the day list can render. */
 internal val previewDayLog: List<SessionSummary> = listOf(
-    SessionSummary(
-        sessionId = 10,
-        activityId = 1,
-        activityName = "Push day",
-        epochDay = PREVIEW_TODAY,
-        notes = "Felt strong, added a set on incline.",
-        effectiveSets = 14,
-        warmupSets = 3,
-        muscleCount = 2,
-    ),
-    SessionSummary(
-        sessionId = 11,
-        activityId = 3,
-        activityName = "Morning run",
-        epochDay = PREVIEW_TODAY,
-        effectiveSets = 0,
-        warmupSets = 0,
-        muscleCount = 0,
-        distanceMeters = 8_400,
-        durationSeconds = 2_640,
-    ),
+    previewStrengthSession,
+    previewDistanceSession,
+    // Started and left. It has to keep its row: it was created deliberately, and a
+    // hidden one could never be reopened or deleted.
     SessionSummary(
         sessionId = 12,
-        activityId = 2,
-        activityName = "Pull day",
+        categoryId = 1,
+        categoryName = "Gym",
+        measurementType = MeasurementType.STRENGTH,
         epochDay = PREVIEW_TODAY,
         effectiveSets = 0,
         warmupSets = 0,
         muscleCount = 0,
     ),
+    // Its category was deleted after it was logged. The sets survive and the row
+    // renders with a fallback name — the one case where categoryName is null.
+    SessionSummary(
+        sessionId = 13,
+        categoryId = null,
+        categoryName = null,
+        measurementType = MeasurementType.STRENGTH,
+        epochDay = PREVIEW_TODAY,
+        effectiveSets = 6,
+        warmupSets = 1,
+        muscleCount = 1,
+    ),
+)
+
+/**
+ * What each of [previewDayLog]'s logs worked — the pills on the cards.
+ *
+ * Only the two strength logs with entries appear: a ride has no muscles, and one
+ * started and left has none yet, and both of those render a line of their own rather
+ * than an empty row of pills.
+ */
+internal val previewDayMuscles: Map<Long, List<String>> = mapOf(
+    10L to listOf("Upper chest", "Triceps"),
+    13L to listOf("Lats"),
 )
 
 /** Two of the seven visible days have something logged. */

@@ -33,11 +33,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncMuscleSeedUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncCatalogSeedsUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
-import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorScreen
-import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightEntryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.bodyweight.BodyWeightScreen
 import botix.dev.myweeklyroutinegymapp.presentation.common.LocalSnackbarHostState
@@ -49,9 +47,6 @@ import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutEntryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.workout.WorkoutLogScreen
 import myweeklyroutinegymapp.shared.generated.resources.Res
-import myweeklyroutinegymapp.shared.generated.resources.activities_title
-import myweeklyroutinegymapp.shared.generated.resources.activity_edit_title
-import myweeklyroutinegymapp.shared.generated.resources.activity_new_title
 import myweeklyroutinegymapp.shared.generated.resources.categories_title
 import myweeklyroutinegymapp.shared.generated.resources.category_edit_title
 import myweeklyroutinegymapp.shared.generated.resources.category_new_title
@@ -85,8 +80,19 @@ import org.koin.compose.koinInject
  * takes the navigation bar's tint like any other vector.
  */
 private enum class Destination(val label: StringResource, val icon: ImageVector) {
+    /**
+     * The log. It is the app.
+     *
+     * There was an Activities tab beside it, holding a catalogue of named things you
+     * created before you could log them. It went in two steps: first the tab was
+     * absorbed here, then the catalogue itself was removed, because a session already
+     * carries everything the names were standing in for — the day, the kind of
+     * training, and the muscles worked with their sets.
+     *
+     * What is left to configure lives in Preferences: the categories that say what
+     * kind of training exists, and the muscles that can be logged against.
+     */
     WORKOUT(Res.string.tab_log, GymIcons.Dumbbell),
-    ACTIVITIES(Res.string.tab_activities, GymIcons.Catalogue),
     WEIGHT(Res.string.tab_weight, GymIcons.Scale),
 
     /**
@@ -162,26 +168,10 @@ private sealed interface Screen {
             }
     }
 
-    data object ActivityList : Screen {
-        override val destination get() = Destination.ACTIVITIES
-        override val title get() = Res.string.activities_title
-    }
-
     /** The other catalogue, and for the same reason under the same tab. */
     data object ActivityCategories : Screen {
         override val destination get() = Destination.PREFERENCES
         override val title get() = Res.string.categories_title
-    }
-
-    /** One activity, new or edited. Zero is the id of one that does not exist yet. */
-    data class ActivityEditor(val activityId: Long) : Screen {
-        override val destination get() = Destination.ACTIVITIES
-        override val title
-            get() = if (activityId == 0L) {
-                Res.string.activity_new_title
-            } else {
-                Res.string.activity_edit_title
-            }
     }
 
     /** One category, new or edited. Zero is the id of one that does not exist yet. */
@@ -204,16 +194,17 @@ private sealed interface Screen {
     /**
      * One log, being written or filled in further.
      *
-     * The pair is the argument for the same reason the body-weight editor takes a
-     * day: `StartOrResumeSessionUseCase` finds a session by (activity, day) and
-     * creates one only when it finds none, so the pair already identifies the row and
-     * the id is something the database decides afterwards.
+     * The **session id** is the argument. It used to be (activity, day), because a
+     * session was found-or-created by that pair; now the row is created before this
+     * route is pushed — either by the New-log flow or by tapping an existing row — and
+     * a day may hold several logs of the same kind, so only the id identifies one.
      *
-     * [existing] is what the day's list already knew when the row was tapped — see
-     * [BodyWeightEntry] for why it is not read back out of the database here.
+     * [existing] is what the caller already knew: whether this log was tapped in the
+     * day's list, or made a second ago. See [BodyWeightEntry] for why it is passed
+     * rather than read back out of the database.
      */
     data class LogEntry(
-        val activityId: Long,
+        val sessionId: Long,
         val epochDay: Long,
         val existing: Boolean,
     ) : Screen {
@@ -247,7 +238,6 @@ private sealed interface Screen {
 private val Destination.startScreen: Screen
     get() = when (this) {
         Destination.WORKOUT -> Screen.WorkoutLog
-        Destination.ACTIVITIES -> Screen.ActivityList
         Destination.WEIGHT -> Screen.BodyWeight
         Destination.PREFERENCES -> Screen.Preferences
     }
@@ -266,7 +256,6 @@ private val Destination.startScreen: Screen
  */
 private const val TAG_WORKOUT_LOG = 0L
 private const val TAG_MUSCLE_CATALOG = 1L
-private const val TAG_ACTIVITY_LIST = 2L
 private const val TAG_ACTIVITY_CATEGORIES = 3L
 private const val TAG_BODY_WEIGHT = 4L
 private const val TAG_BODY_WEIGHT_ENTRY = 5L
@@ -274,38 +263,33 @@ private const val TAG_LOG_ENTRY = 6L
 private const val TAG_PREFERENCES = 7L
 private const val TAG_MUSCLE_EDITOR = 8L
 private const val TAG_CATEGORY_EDITOR = 9L
-private const val TAG_ACTIVITY_EDITOR = 10L
 
 private fun Screen.saved(): List<Long> = when (this) {
     Screen.WorkoutLog -> listOf(TAG_WORKOUT_LOG, 0L, 0L, 0L)
     Screen.MuscleCatalog -> listOf(TAG_MUSCLE_CATALOG, 0L, 0L, 0L)
-    Screen.ActivityList -> listOf(TAG_ACTIVITY_LIST, 0L, 0L, 0L)
     Screen.ActivityCategories -> listOf(TAG_ACTIVITY_CATEGORIES, 0L, 0L, 0L)
     Screen.BodyWeight -> listOf(TAG_BODY_WEIGHT, 0L, 0L, 0L)
     is Screen.BodyWeightEntry ->
         listOf(TAG_BODY_WEIGHT_ENTRY, epochDay, if (existing) 1L else 0L, 0L)
     is Screen.LogEntry ->
-        listOf(TAG_LOG_ENTRY, activityId, epochDay, if (existing) 1L else 0L)
+        listOf(TAG_LOG_ENTRY, sessionId, epochDay, if (existing) 1L else 0L)
     Screen.Preferences -> listOf(TAG_PREFERENCES, 0L, 0L, 0L)
     is Screen.MuscleEditor ->
         listOf(TAG_MUSCLE_EDITOR, groupId, muscleId, if (isGroup) 1L else 0L)
     is Screen.CategoryEditor -> listOf(TAG_CATEGORY_EDITOR, categoryId, 0L, 0L)
-    is Screen.ActivityEditor -> listOf(TAG_ACTIVITY_EDITOR, activityId, 0L, 0L)
 }
 
 private fun screenOf(tag: Long, arg0: Long, arg1: Long, arg2: Long): Screen = when (tag) {
     TAG_MUSCLE_CATALOG -> Screen.MuscleCatalog
-    TAG_ACTIVITY_LIST -> Screen.ActivityList
     TAG_ACTIVITY_CATEGORIES -> Screen.ActivityCategories
     TAG_BODY_WEIGHT -> Screen.BodyWeight
     TAG_BODY_WEIGHT_ENTRY -> Screen.BodyWeightEntry(epochDay = arg0, existing = arg1 == 1L)
     TAG_LOG_ENTRY ->
-        Screen.LogEntry(activityId = arg0, epochDay = arg1, existing = arg2 == 1L)
+        Screen.LogEntry(sessionId = arg0, epochDay = arg1, existing = arg2 == 1L)
     TAG_PREFERENCES -> Screen.Preferences
     TAG_MUSCLE_EDITOR ->
         Screen.MuscleEditor(groupId = arg0, muscleId = arg1, isGroup = arg2 == 1L)
     TAG_CATEGORY_EDITOR -> Screen.CategoryEditor(categoryId = arg0)
-    TAG_ACTIVITY_EDITOR -> Screen.ActivityEditor(activityId = arg0)
     // Including TAG_WORKOUT_LOG, and anything a future version of the app wrote that
     // this one does not know: the log is where the app opens, so an unreadable stack
     // degrades to the start rather than to a crash.
@@ -341,9 +325,9 @@ private val ScreenStackSaver: Saver<List<Screen>, Any> = listSaver(
  * back arrow, and the tab row — which are only ever real on a device.
  */
 /**
- * Puts the shipped muscle catalogue in place, and keeps its names in the device's
- * language. See [SyncMuscleSeedUseCase] for what that means; this is only about
- * *when*.
+ * Puts the shipped catalogues — categories and muscles — in place, and keeps their
+ * names in the device's language. See [SyncCatalogSeedsUseCase] for what that means;
+ * this is only about *when*.
  *
  * ### Why the key is a translated string
  * The obvious key is `Unit` — run once per composition. That is right for the install
@@ -355,15 +339,15 @@ private val ScreenStackSaver: Saver<List<Screen>, Any> = listSaver(
  * would make `Unit` enough by accident. Keying on one of the seeded names instead
  * makes it enough on purpose: the key is a string that changes exactly when the
  * translations do, so the effect re-runs when — and only when — there is a
- * retranslation to perform. Any of the twenty-nine names would do; this is the one
- * that appears in all seven groups.
+ * retranslation to perform. Any seeded name would do; this is the one that appears
+ * in all seven muscle groups.
  *
  * The work itself is idempotent and writes nothing when there is nothing to change,
  * so an extra run costs a handful of indexed reads.
  */
 @Composable
-private fun SyncMuscleSeed() {
-    val sync = koinInject<SyncMuscleSeedUseCase>()
+private fun SyncCatalogSeeds() {
+    val sync = koinInject<SyncCatalogSeedsUseCase>()
     val languageKey = stringResource(Res.string.muscle_seed_general)
     LaunchedEffect(languageKey) { sync() }
 }
@@ -374,7 +358,7 @@ private fun SyncMuscleSeed() {
 @Composable
 fun App() {
     GymTheme {
-        SyncMuscleSeed()
+        SyncCatalogSeeds()
 
         var backStack by rememberSaveable(stateSaver = ScreenStackSaver) {
             mutableStateOf(listOf<Screen>(Screen.WorkoutLog))
@@ -508,9 +492,13 @@ fun App() {
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
                     when (currentScreen) {
+                        // Two ways in, one destination. Tapping a row opens the log
+                        // it belongs to; pressing New log picks a category, creates
+                        // the session, and opens that. The screen itself never
+                        // creates anything either way.
                         Screen.WorkoutLog -> WorkoutLogScreen(
-                            onOpenEntry = { activityId, epochDay, existing ->
-                                push(Screen.LogEntry(activityId, epochDay, existing))
+                            onOpenEntry = { sessionId, epochDay, existing ->
+                                push(Screen.LogEntry(sessionId, epochDay, existing))
                             },
                         )
 
@@ -518,7 +506,7 @@ fun App() {
                         // the back arrow with nothing to commit; a distance log leaves
                         // when it is saved. Both land back on the day's list.
                         is Screen.LogEntry -> WorkoutEntryScreen(
-                            activityId = currentScreen.activityId,
+                            sessionId = currentScreen.sessionId,
                             epochDay = currentScreen.epochDay,
                             onDone = { pop() },
                         )
@@ -541,15 +529,6 @@ fun App() {
                             groupId = currentScreen.groupId,
                             muscleId = currentScreen.muscleId,
                             isGroup = currentScreen.isGroup,
-                            onDone = { pop() },
-                        )
-
-                        Screen.ActivityList -> ActivityListScreen(
-                            onEdit = { activityId -> push(Screen.ActivityEditor(activityId)) },
-                        )
-
-                        is Screen.ActivityEditor -> ActivityEditorScreen(
-                            activityId = currentScreen.activityId,
                             onDone = { pop() },
                         )
 

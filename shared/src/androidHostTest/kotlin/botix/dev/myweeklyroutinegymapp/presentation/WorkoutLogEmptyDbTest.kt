@@ -3,8 +3,6 @@ package botix.dev.myweeklyroutinegymapp.presentation
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import botix.dev.myweeklyroutinegymapp.data.SystemClock
 import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityMuscleRepositoryImpl
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.BodyWeightRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.MuscleCatalogRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
@@ -14,8 +12,6 @@ import botix.dev.myweeklyroutinegymapp.di.domainModule
 import botix.dev.myweeklyroutinegymapp.di.viewModelModule
 import botix.dev.myweeklyroutinegymapp.domain.Clock
 import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityCategoryRepository
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityMuscleRepository
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.BodyWeightRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleCatalogRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.WorkoutRepository
@@ -74,9 +70,7 @@ class WorkoutLogEmptyDbTest {
             modules(
                 module {
                     single<Clock> { SystemClock() }
-                    single<ActivityRepository> { ActivityRepositoryImpl(db, dispatcher) }
                     single<ActivityCategoryRepository> { ActivityCategoryRepositoryImpl(db, dispatcher) }
-                    single<ActivityMuscleRepository> { ActivityMuscleRepositoryImpl(db, dispatcher) }
                     single<BodyWeightRepository> { BodyWeightRepositoryImpl(db, dispatcher) }
                     single<MuscleCatalogRepository> { MuscleCatalogRepositoryImpl(db, dispatcher) }
                     single<WorkoutRepository> { WorkoutRepositoryImpl(db, dispatcher) }
@@ -95,7 +89,9 @@ class WorkoutLogEmptyDbTest {
         // Nothing to show, but the day is still resolved — the header and the strip
         // render from these whether or not anything has ever been logged.
         assertTrue(settled.dayLog.isEmpty())
-        assertTrue(settled.strengthActivities.isEmpty())
+        // No categories either, which is the state a database with nothing seeded in
+        // it is in — the New-log dialog says so rather than offering an empty list.
+        assertTrue(settled.categories.isEmpty())
         assertEquals(settled.today, settled.selectedDay)
     }
 }

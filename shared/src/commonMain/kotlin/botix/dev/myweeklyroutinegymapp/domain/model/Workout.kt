@@ -1,13 +1,22 @@
 package botix.dev.myweeklyroutinegymapp.domain.model
 
 /**
- * A strength session header. The entries hanging off it ([SessionEntry]) are what
- * carry the data; the session itself only fixes *which activity* and *which day*.
+ * A session header: one piece of training, on one day.
+ *
+ * The entries hanging off it ([SessionEntry]) carry the data; the header fixes *which
+ * kind of training* and *which day*. It used to fix which **activity** — a named,
+ * reusable thing you had to create first — and that concept is gone (see 6.sqm).
  */
 data class WorkoutSession(
     val id: Long,
-    /** Must reference an activity of type [MeasurementType.STRENGTH]. */
-    val activityId: Long,
+    /**
+     * Which kind of training, and therefore which form it opens.
+     *
+     * Null is a real state, not a bug: deleting a category strips the label off its
+     * logs rather than deleting them, because the sets are the history and the name is
+     * not.
+     */
+    val categoryId: Long? = null,
     val epochDay: Long,
     val notes: String? = null,
     val createdAt: Long,
@@ -34,7 +43,8 @@ data class SessionEntry(
 )
 
 /**
- * One session as the day view lists it: which activity, and what it adds up to.
+ * One session as the day view lists it: which kind of training, and what it adds up
+ * to.
  *
  * A read model, assembled by a single query rather than by fetching each session's
  * entries — the card shows totals, so loading the entries to add them up would be a
@@ -42,8 +52,20 @@ data class SessionEntry(
  */
 data class SessionSummary(
     val sessionId: Long,
-    val activityId: Long,
-    val activityName: String,
+    val categoryId: Long? = null,
+    /**
+     * Null when the category was deleted after this was logged. The screen supplies
+     * its own wording for that; the model does not invent a name, because inventing
+     * one here would make an orphan indistinguishable from a category actually called
+     * whatever we chose.
+     */
+    val categoryName: String? = null,
+    /**
+     * What this session was measured by, carried from the category rather than
+     * inferred from which columns are null — an empty distance log and an empty
+     * strength log look identical from the numbers alone.
+     */
+    val measurementType: MeasurementType = MeasurementType.STRENGTH,
     val epochDay: Long,
     val notes: String? = null,
     val effectiveSets: Long,
@@ -105,13 +127,13 @@ data class MuscleVolume(
 )
 
 /**
- * What one activity added up to over a window — a week, on the Activities screen.
+ * What one kind of training added up to over a window — a week.
  *
- * Only exists for activities that were actually trained in the window. There is no
- * "zero" row: not being in the result is what "not trained" means.
+ * Only exists for categories actually trained in the window. There is no "zero" row:
+ * not being in the result is what "not trained" means.
  */
-data class ActivityVolume(
-    val activityId: Long,
+data class CategoryVolume(
+    val categoryId: Long?,
     val effectiveSets: Long,
     val warmupSets: Long,
     /** Distinct days trained, not sessions — twice in a day is still one day. */

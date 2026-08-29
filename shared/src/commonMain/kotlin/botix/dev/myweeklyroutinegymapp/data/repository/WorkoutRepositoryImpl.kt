@@ -10,7 +10,7 @@ import botix.dev.myweeklyroutinegymapp.db.GymDatabase
 import botix.dev.myweeklyroutinegymapp.domain.model.DailyVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.GroupVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleVolume
-import botix.dev.myweeklyroutinegymapp.domain.model.ActivityVolume
+import botix.dev.myweeklyroutinegymapp.domain.model.CategoryVolume
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionTotals
@@ -47,25 +47,30 @@ class WorkoutRepositoryImpl(
     override fun observeTotals(sessionId: Long): Flow<SessionTotals> =
         queries.sessionTotals(sessionId).asFlow().mapToOne(dispatcher).map { it.toDomain() }
 
+    override fun observeSessionSummary(sessionId: Long): Flow<SessionSummary?> =
+        queries.selectSessionDetailById(sessionId).asFlow().mapToOneOrNull(dispatcher)
+            .map { it?.toDomain() }
+
+    override fun observeDayMuscles(epochDay: Long): Flow<Map<Long, List<String>>> =
+        queries.selectDayMuscles(epochDay).asFlow().mapToList(dispatcher).map { rows ->
+            // Grouped here rather than in SQL: SQLite has no array type, and
+            // group_concat would hand back a string the UI would have to split — which
+            // breaks on the first muscle name containing the separator.
+            rows.groupBy({ it.session_id }, { it.muscle_name })
+        }
+
     override suspend fun getSession(id: Long): WorkoutSession? = withContext(dispatcher) {
         queries.selectSessionById(id).executeAsOneOrNull()?.toDomain()
     }
 
-    override suspend fun findSession(activityId: Long, epochDay: Long): WorkoutSession? =
+    override suspend fun startSession(categoryId: Long?, epochDay: Long, createdAt: Long): Long =
         withContext(dispatcher) {
-            queries.selectSessionByActivityAndDay(activityId, epochDay).executeAsOneOrNull()?.toDomain()
-        }
-
-    override suspend fun startOrResumeSession(activityId: Long, epochDay: Long, createdAt: Long): Long =
-        withContext(dispatcher) {
-            // Look-up and insert must share a transaction, otherwise logging twice in
-            // quick succession creates two sessions for the same activity and day.
+            // Still a transaction, but for the ordinary reason now rather than to
+            // deduplicate: last_insert_rowid() is connection-scoped, so a concurrent
+            // write between the insert and the read would hand back another row's id.
             db.transactionWithResult {
-                val existing = queries.selectSessionByActivityAndDay(activityId, epochDay).executeAsOneOrNull()
-                existing?.id ?: run {
-                    queries.insertSession(activityId, epochDay, null, createdAt)
-                    queries.lastInsertRowId().executeAsOne()
-                }
+                queries.insertSession(categoryId, epochDay, null, createdAt)
+                queries.lastInsertRowId().executeAsOne()
             }
         }
 
@@ -127,11 +132,11 @@ class WorkoutRepositoryImpl(
         queries.volumePerMuscleInRange(fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
-    override fun observeVolumePerActivity(
+    override fun observeVolumePerCategory(
         fromEpochDay: Long,
         toEpochDay: Long,
-    ): Flow<List<ActivityVolume>> =
-        queries.volumePerActivityInRange(fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
+    ): Flow<List<CategoryVolume>> =
+        queries.volumePerCategoryInRange(fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
     override fun observeVolumePerGroup(fromEpochDay: Long, toEpochDay: Long): Flow<List<GroupVolume>> =
@@ -151,9 +156,9 @@ class WorkoutRepositoryImpl(
             .map { rows -> rows.map { it.toDomain() } }
 
     override fun observeTrainedDays(
-        activityId: Long,
+        categoryId: Long,
         fromEpochDay: Long,
         toEpochDay: Long,
     ): Flow<List<Long>> =
-        queries.trainedDaysForActivity(activityId, fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
+        queries.trainedDaysForCategory(categoryId, fromEpochDay, toEpochDay).asFlow().mapToList(dispatcher)
 }

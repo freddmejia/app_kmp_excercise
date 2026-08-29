@@ -2,8 +2,6 @@ package botix.dev.myweeklyroutinegymapp.presentation
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import botix.dev.myweeklyroutinegymapp.data.repository.ActivityCategoryRepositoryImpl
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityMuscleRepositoryImpl
-import botix.dev.myweeklyroutinegymapp.data.repository.ActivityRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.BodyWeightRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.MuscleCatalogRepositoryImpl
 import botix.dev.myweeklyroutinegymapp.data.repository.WorkoutRepositoryImpl
@@ -14,8 +12,6 @@ import botix.dev.myweeklyroutinegymapp.di.viewModelModule
 import botix.dev.myweeklyroutinegymapp.domain.Clock
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityCategoryRepository
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityMuscleRepository
-import botix.dev.myweeklyroutinegymapp.domain.repository.ActivityRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.BodyWeightRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleCatalogRepository
 import botix.dev.myweeklyroutinegymapp.domain.repository.WorkoutRepository
@@ -92,9 +88,7 @@ class WorkoutEntryTest {
         modules(
             module {
                 single<Clock> { FixedClock(today) }
-                single<ActivityRepository> { ActivityRepositoryImpl(db, dispatcher) }
                 single<ActivityCategoryRepository> { ActivityCategoryRepositoryImpl(db, dispatcher) }
-                single<ActivityMuscleRepository> { ActivityMuscleRepositoryImpl(db, dispatcher) }
                 single<BodyWeightRepository> { BodyWeightRepositoryImpl(db, dispatcher) }
                 single<MuscleCatalogRepository> { MuscleCatalogRepositoryImpl(db, dispatcher) }
                 single<WorkoutRepository> { WorkoutRepositoryImpl(db, dispatcher) }
@@ -114,17 +108,29 @@ class WorkoutEntryTest {
      */
     private fun TestScope.viewModel(
         koin: Koin,
-        activityId: Long,
+        sessionId: Long,
         day: Long = today,
     ): WorkoutEntryViewModel {
-        val viewModel = koin.get<WorkoutEntryViewModel> { parametersOf(activityId, day) }
+        val viewModel = koin.get<WorkoutEntryViewModel> { parametersOf(sessionId, day) }
         backgroundScope.launch(dispatcher) { viewModel.state.collect {} }
         viewModel.onOpened()
         return viewModel
     }
 
-    private suspend fun activity(db: GymDatabase, name: String, type: MeasurementType): Long =
-        ActivityRepositoryImpl(db, dispatcher).create(name, type, createdAt = 0L)
+    private suspend fun category(db: GymDatabase, name: String, type: MeasurementType): Long =
+        ActivityCategoryRepositoryImpl(db, dispatcher).create(name, type, createdAt = 0L)
+
+    /**
+     * A log of that kind, on that day, ready to open.
+     *
+     * The screen no longer creates its own session — the New-log flow does, before the
+     * route is pushed — so every test here starts from a row that already exists.
+     */
+    private suspend fun startedLog(
+        db: GymDatabase,
+        categoryId: Long,
+        day: Long = today,
+    ): Long = WorkoutRepositoryImpl(db, dispatcher).startSession(categoryId, day, createdAt = 0L)
 
     private suspend fun muscle(db: GymDatabase, group: String, name: String): Long {
         val muscles = MuscleCatalogRepositoryImpl(db, dispatcher)
@@ -142,51 +148,62 @@ class WorkoutEntryTest {
     }
 
     @Test
-    fun aStrengthActivityOpensTheMusclePickerAndTheSessionExistsImmediately() = runTest(dispatcher) {
+    fun aStrengthLogOpensTheMusclePicker() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "push day", MeasurementType.STRENGTH)
+        val gym = category(db, "Gym", MeasurementType.STRENGTH)
         muscle(db, "chest", "pecs")
+        val session = startedLog(db, gym)
 
-        val state = viewModel(koin(db), id).state.value
+        val state = viewModel(koin(db), session).state.value
 
         assertEquals(WorkoutEntryForm.STRENGTH, state.form)
-        // The row is written on arrival, not on save: checking a muscle is the write,
-        // and it needs a session to belong to.
-        assertNotNull(state.sessionId)
+        // The row already existed when the screen opened — New log made it. This
+        // screen creates nothing, which is why opening one by mistake leaves nothing
+        // behind that opening it did not already have.
+        assertEquals("Gym", state.categoryName)
         assertEquals(1, dayLog(db)(today).first().size)
     }
 
     @Test
-    fun reopeningTheSameDayResumesTheSessionRatherThanStartingASecond() = runTest(dispatcher) {
+    fun openingTheSameLogTwiceIsTheSameRow() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "push day", MeasurementType.STRENGTH)
+        val gym = category(db, "Gym", MeasurementType.STRENGTH)
+        val session = startedLog(db, gym)
         val graph = koin(db)
 
-        val first = viewModel(graph, id).state.value.sessionId
-        val second = viewModel(graph, id).state.value.sessionId
+        val first = viewModel(graph, session).state.value.session
+        val second = viewModel(graph, session).state.value.session
 
-        assertEquals(first, second)
+        // Identified by session id now, so "the same log" is a fact about the argument
+        // rather than something resolved from (activity, day) on each visit.
+        assertEquals(first?.sessionId, second?.sessionId)
         assertEquals(1, dayLog(db)(today).first().size)
     }
 
     @Test
-    fun theSameActivityOnAnotherDayIsItsOwnLog() = runTest(dispatcher) {
+    fun twoLogsOfTheSameKindOnOneDayAreSeparate() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "push day", MeasurementType.STRENGTH)
+        val gym = category(db, "Gym", MeasurementType.STRENGTH)
+        val muscleId = muscle(db, "chest", "pecs")
+        val morning = startedLog(db, gym)
+        val evening = startedLog(db, gym)
         val graph = koin(db)
 
-        val tuesday = viewModel(graph, id, today).state.value.sessionId
-        val monday = viewModel(graph, id, today - 1).state.value.sessionId
+        viewModel(graph, morning).addSets(muscleId, effectiveSets = 3)
+        val eveningModel = viewModel(graph, evening)
 
-        assertTrue(tuesday != monday)
-        assertEquals(1, dayLog(db)(today).first().size)
-        assertEquals(1, dayLog(db)(today - 1).first().size)
+        // The whole reason the screen is keyed by session: sets written into one log
+        // must not appear in the other, even though both are Gym on the same day.
+        assertTrue(morning != evening)
+        assertEquals(0L, eveningModel.state.value.totals.effectiveSets)
+        assertEquals(3L, viewModel(graph, morning).state.value.totals.effectiveSets)
+        assertEquals(2, dayLog(db)(today).first().size)
     }
 
     @Test
     fun checkingAMuscleWritesASetAndUncheckingTakesItBack() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "push day", MeasurementType.STRENGTH)
+        val id = startedLog(db, category(db, "Gym", MeasurementType.STRENGTH))
         val muscleId = muscle(db, "chest", "pecs")
 
         val viewModel = viewModel(koin(db), id)
@@ -206,21 +223,24 @@ class WorkoutEntryTest {
     @Test
     fun aDistanceActivityOpensTheOtherFormAndWritesNothingUntilItIsSaved() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
 
         val state = viewModel(koin(db), id).state.value
 
         assertEquals(WorkoutEntryForm.DISTANCE_TIME, state.form)
-        // No session, and no row: unlike a strength log there is nothing to add to
-        // yet, so arriving on the form must not create the day's ride.
-        assertNull(state.sessionId)
-        assertTrue(dayLog(db)(today).first().isEmpty())
+        // The row exists — New log made it — but it holds no measurements yet. Both
+        // forms start from a row now; what differs is that a distance log has nothing
+        // recorded in it until Save, where a strength log is written a tick at a time.
+        assertEquals("Bicycle", state.categoryName)
+        val session = dayLog(db)(today).first().single()
+        assertNull(session.distanceMeters)
+        assertNull(session.durationSeconds)
     }
 
     @Test
     fun savingADistanceLogStoresMetresAndSecondsAndClosesTheScreen() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
 
         val viewModel = viewModel(koin(db), id)
         val saved = savedSignals(viewModel)
@@ -237,7 +257,7 @@ class WorkoutEntryTest {
     @Test
     fun aCommaIsADecimalPoint() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
 
         val viewModel = viewModel(koin(db), id)
         viewModel.setDistance("20,5")
@@ -249,7 +269,7 @@ class WorkoutEntryTest {
     @Test
     fun anEmptyDistanceFormIsRefusedAndNothingIsWritten() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
 
         val viewModel = viewModel(koin(db), id)
         val saved = savedSignals(viewModel)
@@ -259,13 +279,13 @@ class WorkoutEntryTest {
 
         assertEquals(WorkoutEntryMessage.NothingMeasured, viewModel.state.value.message)
         assertTrue(saved.isEmpty())
-        assertTrue(dayLog(db)(today).first().isEmpty())
+        assertNull(dayLog(db)(today).first().single().distanceMeters)
     }
 
     @Test
     fun eitherMeasureOnItsOwnIsARealRecord() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "natación", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
 
         val viewModel = viewModel(koin(db), id)
         // A swim nobody timed.
@@ -280,7 +300,7 @@ class WorkoutEntryTest {
     @Test
     fun reopeningADistanceLogShowsItInTheUnitsItWasTypedIn() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
         val graph = koin(db)
 
         viewModel(graph, id).apply {
@@ -300,7 +320,7 @@ class WorkoutEntryTest {
     @Test
     fun reopeningALogThatWasSavedDoesNotCloseTheScreenOnArrival() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
         val graph = koin(db)
 
         // The same instance the store hands back: this ViewModel is keyed by
@@ -320,7 +340,7 @@ class WorkoutEntryTest {
     @Test
     fun aSecondVisitStartsFromTheDatabaseRatherThanAnAbandonedDraft() = runTest(dispatcher) {
         val db = database()
-        val id = activity(db, "bici 20k", MeasurementType.DISTANCE_TIME)
+        val id = startedLog(db, category(db, "Bicycle", MeasurementType.DISTANCE_TIME))
 
         val viewModel = viewModel(koin(db), id)
         // Typed, then left without saving.
@@ -328,6 +348,8 @@ class WorkoutEntryTest {
         viewModel.onOpened()
 
         assertEquals("", viewModel.state.value.distanceInput)
-        assertTrue(dayLog(db)(today).first().isEmpty())
+        // The row is still there — it was created before the screen opened — and it
+        // still holds nothing, because the draft was never saved.
+        assertNull(dayLog(db)(today).first().single().distanceMeters)
     }
 }
