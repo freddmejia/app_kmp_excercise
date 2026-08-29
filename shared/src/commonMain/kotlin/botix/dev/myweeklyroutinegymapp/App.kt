@@ -1,7 +1,9 @@
 package botix.dev.myweeklyroutinegymapp
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -11,6 +13,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -33,6 +37,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncCatalogSeedsUseCase
@@ -431,101 +437,161 @@ fun App() {
             // would inset the same strip twice.
             contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
             topBar = {
-                TopAppBar(
-                    // The screen names itself in one place for every screen, at a
-                    // fixed height, instead of each one drawing its own headline at
-                    // whatever offset its content happened to start at.
-                    title = { Text(stringResource(currentScreen.title)) },
-                    navigationIcon = {
-                        // Only on a pushed route, and it is the one way back: iOS has
-                        // no system back at all, and the Android gesture is not wired
-                        // to this stack. Nothing draws in this slot at the root, so
-                        // the title sits where it would anyway.
-                        if (backStack.size > 1) {
-                            IconButton(onClick = { pop() }) {
-                                Icon(
-                                    imageVector = GymIcons.ArrowLeft,
-                                    contentDescription = stringResource(Res.string.common_back),
-                                )
+                // Same treatment as the bottom bar: no band, one hairline rule.
+                //
+                // The two bars frame the screen and have to agree — that was the
+                // argument for painting both `surfaceContainer` in the first place,
+                // and it is the same argument now that neither is painted. A bar with
+                // a band above a bar without one reads as a mistake whichever way
+                // round it is.
+                Column {
+                    TopAppBar(
+                        // The screen names itself in one place for every screen, at a
+                        // fixed height, instead of each one drawing its own headline at
+                        // whatever offset its content happened to start at.
+                        title = { Text(stringResource(currentScreen.title)) },
+                        navigationIcon = {
+                            // Only on a pushed route, and it is the one way back: iOS has
+                            // no system back at all, and the Android gesture is not wired
+                            // to this stack. Nothing draws in this slot at the root, so
+                            // the title sits where it would anyway.
+                            if (backStack.size > 1) {
+                                IconButton(onClick = { pop() }) {
+                                    Icon(
+                                        imageVector = GymIcons.ArrowLeft,
+                                        contentDescription = stringResource(Res.string.common_back),
+                                    )
+                                }
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        // Named rather than defaulted, and named to the same role the
-                        // navigation bar takes: the two frame the screen, so they have
-                        // to be the same step above it. M3's own default for this bar
-                        // is `surface` — the screen's own colour — which would leave
-                        // the top of the app flat while the bottom of it is raised.
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        // Muted like an unselected tab: this is a control, but it is
-                        // not the thing on the screen to look at.
-                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            // Transparent, matching the navigation bar. It was
+                            // `surfaceContainer` — a step above the screen — and the rule
+                            // below does that job now with a line instead of a band.
+                            //
+                            // Transparent rather than naming the screen's colour, so the
+                            // bar cannot disagree with the Scaffold it sits in, including
+                            // over the status bar strip it extends under and paints.
+                            containerColor = Color.Transparent,
+                            // Named anyway. With a transparent container M3 would resolve
+                            // these against `surface`, and the app's screens are not all
+                            // `surface` — leaving them to the default is how a title ends
+                            // up the wrong grey on one screen and right on the others.
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            // Muted like an unselected tab: this is a control, but it is
+                            // not the thing on the screen to look at.
+                            navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
+                    // Below the bar rather than above it, which is the only difference
+                    // from the bottom one: each rule sits between the chrome and the
+                    // content it is separating from.
+                    HorizontalDivider(
+                        thickness = with(LocalDensity.current) { 1.toDp() },
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
             },
             // Above the navigation bar rather than over it: the tab row stays reachable
             // while a message is on screen.
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
-                // Container colour left to M3, which takes `surfaceContainer` from the
-                // theme — the bar then sits a step above the screen behind it in both
-                // schemes without naming a colour here.
-                NavigationBar {
-                    Destination.entries.forEach { destination ->
-                        // Derived, not stored. The bar has no idea of its own about
-                        // which tab is current; it asks the back stack. Hoisted to a
-                        // local because the label reads it too.
-                        val selected = destination == currentScreen.destination
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { select(destination) },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    // Null on purpose: the label below is already
-                                    // read out, and a description here would make
-                                    // every tab announce itself twice.
-                                    contentDescription = null,
-                                )
-                            },
-                            label = {
-                                Text(
-                                    stringResource(destination.label),
-                                    // Weight as well as colour. The bar already tints
-                                    // the selected item and puts a pill behind its
-                                    // icon, but both of those are colour — and colour
-                                    // alone is the one signal that does not survive a
-                                    // greyscale display, a colour-vision difference,
-                                    // or bright sunlight. The weight says the same
-                                    // thing in a second channel.
-                                    fontWeight = if (selected) {
-                                        FontWeight.SemiBold
-                                    } else {
-                                        FontWeight.Normal
-                                    },
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                // The M3 pill, filled with the accent itself rather
-                                // than a tinted container. In the light scheme the
-                                // pale `primaryContainer` against the bar's own
-                                // `surfaceContainer` is 1.1:1 — a selection you
-                                // cannot see. Filled with `primary` it is 5.7:1, and
-                                // the selected tab reads across the room.
-                                indicatorColor = MaterialTheme.colorScheme.primary,
-                                // Sits *inside* that pill, so it is the accent's
-                                // on-colour, not the accent.
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                                // Sits *below* the pill, on the bar, so here the
-                                // accent is the foreground.
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                // Muted, but still 8:1 on the bar — "not selected"
-                                // must not mean "not readable".
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
+                // No band behind the tabs: the bar takes whatever is behind it.
+                //
+                // M3 defaults this to `surfaceContainer`, which put the bar a step
+                // above the screen and drew a grey strip across the bottom. The tabs
+                // read perfectly well without it — an icon, a label, and a filled pill
+                // on the selected one are already three signals — and the strip was
+                // spending a band of colour to say something none of them needed help
+                // saying.
+                //
+                // `tonalElevation = 0` as well, and it is not redundant: M3 applies a
+                // surface tint on top of the container colour, so leaving the default
+                // 3.dp would paint the band back on in a slightly different shade.
+                //
+                // Transparent rather than naming `background`, so the bar cannot
+                // disagree with the Scaffold it sits in — including over the system
+                // gesture strip, which this bar extends under and therefore paints.
+                Column {
+                    // The edge the band used to give.
+                    //
+                    // With the bar transparent there was nothing marking where the
+                    // content stops and the tabs begin, and a list scrolled to the
+                    // bottom ran straight into them. A rule does the same job the band
+                    // did, with one line instead of a filled strip.
+                    //
+                    // **One physical pixel, not one dp.** Asked for in pixels, and it
+                    // is the right unit for this one thing: a separator should stay
+                    // hairline-thin however dense the screen is, and at 420dpi a 1.dp
+                    // rule is nearly three pixels and reads as a border. Everything
+                    // else in this app is in dp precisely because it should scale;
+                    // this is the exception, so it says so out loud.
+                    HorizontalDivider(
+                        thickness = with(LocalDensity.current) { 1.toDp() },
+                        // The M3 divider role rather than a named grey: it is grey in
+                        // the light scheme and a different, correct grey in the dark
+                        // one, which a hard-coded colour could not be.
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Destination.entries.forEach { destination ->
+                            // Derived, not stored. The bar has no idea of its own about
+                            // which tab is current; it asks the back stack. Hoisted to a
+                            // local because the label reads it too.
+                            val selected = destination == currentScreen.destination
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { select(destination) },
+                                icon = {
+                                    Icon(
+                                        imageVector = destination.icon,
+                                        // Null on purpose: the label below is already
+                                        // read out, and a description here would make
+                                        // every tab announce itself twice.
+                                        contentDescription = null,
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        stringResource(destination.label),
+                                        // Weight as well as colour. The bar already tints
+                                        // the selected item and puts a pill behind its
+                                        // icon, but both of those are colour — and colour
+                                        // alone is the one signal that does not survive a
+                                        // greyscale display, a colour-vision difference,
+                                        // or bright sunlight. The weight says the same
+                                        // thing in a second channel.
+                                        fontWeight = if (selected) {
+                                            FontWeight.SemiBold
+                                        } else {
+                                            FontWeight.Normal
+                                        },
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    // The M3 pill, filled with the accent itself rather
+                                    // than a tinted container. In the light scheme the
+                                    // pale `primaryContainer` against the bar's own
+                                    // `surfaceContainer` is 1.1:1 — a selection you
+                                    // cannot see. Filled with `primary` it is 5.7:1, and
+                                    // the selected tab reads across the room.
+                                    indicatorColor = MaterialTheme.colorScheme.primary,
+                                    // Sits *inside* that pill, so it is the accent's
+                                    // on-colour, not the accent.
+                                    selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                    // Sits *below* the pill, on the bar, so here the
+                                    // accent is the foreground.
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    // Muted, but still 8:1 on the bar — "not selected"
+                                    // must not mean "not readable".
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                            )
+                        }
                     }
                 }
             },
