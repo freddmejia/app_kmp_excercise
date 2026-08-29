@@ -1,9 +1,11 @@
 package botix.dev.myweeklyroutinegymapp.di
 
 import botix.dev.myweeklyroutinegymapp.data.GymData
+import botix.dev.myweeklyroutinegymapp.data.ResourceMuscleSeed
 import botix.dev.myweeklyroutinegymapp.data.SystemClock
 import botix.dev.myweeklyroutinegymapp.db.DriverFactory
 import botix.dev.myweeklyroutinegymapp.domain.Clock
+import botix.dev.myweeklyroutinegymapp.domain.repository.MuscleSeedSource
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveActivityUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.ArchiveCategoryUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.activity.AssignActivityCategoryUseCase
@@ -52,6 +54,7 @@ import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.RemoveMuscleFromSe
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.RenameMuscleUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SetMuscleSetsUseCase
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.StartOrResumeSessionUseCase
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncMuscleSeedUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorViewModel
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityListViewModel
@@ -95,6 +98,9 @@ val databaseModule = module {
  */
 val repositoryModule = module {
     single<Clock> { SystemClock() }
+    // The catalogue the app ships. A `single` because it is a constant list plus a
+    // resource lookup, and nothing about it is per-caller.
+    single<MuscleSeedSource> { ResourceMuscleSeed() }
     single { get<GymData>().activities }
     single { get<GymData>().activityCategories }
     single { get<GymData>().activityMuscles }
@@ -162,6 +168,7 @@ val domainModule = module {
     factoryOf(::ObserveTrainedDaysUseCase)
 
     // Muscle catalogue
+    factoryOf(::SyncMuscleSeedUseCase)
     factoryOf(::ObserveMuscleGroupsUseCase)
     factoryOf(::ObserveMusclesUseCase)
     factoryOf(::CreateMuscleGroupUseCase)

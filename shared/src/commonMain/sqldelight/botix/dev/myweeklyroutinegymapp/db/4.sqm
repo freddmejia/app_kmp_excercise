@@ -1,0 +1,46 @@
+-- Schema 4 -> 5: the shipped muscle catalogue.
+--
+-- Until now the muscle hierarchy started empty and the first thing a new user had to
+-- do was invent one. The app ships a catalogue now (Chest -> Upper/Middle/Lower and
+-- the rest), which needs two things the schema did not have.
+--
+-- ### `seed_key`
+-- A stable identifier for a row the *app* created, null for a row the *user* created.
+-- It is what lets the catalogue follow the device language: names are stored as text
+-- like any other row, so every existing query keeps reading `muscle.name` unchanged,
+-- and a start-up pass rewrites the names of seeded rows when the language changes.
+--
+-- Renaming a seeded row clears its key (see renameGroup/renameMuscle in
+-- MuscleCatalog.sq). That is the whole ownership rule: once you have named it, it is
+-- yours, and nothing rewrites it again.
+--
+-- ### `muscle_seed`
+-- A ledger of every seed key ever inserted. Without it, deleting a seeded muscle
+-- would be undone by the next launch — the sync would see it missing and put it
+-- back. The ledger keeps deletions deleted.
+--
+-- Nothing here is destructive: both columns default to NULL, so every muscle and
+-- group that already exists on a device stays exactly as it is and reads as
+-- user-owned, which is what it is. The seed is added *alongside* it.
+--
+-- Mirrors MuscleCatalog.sq exactly. The two must agree: a fresh install runs
+-- Schema.create() and never touches this file, so any drift only ever breaks for
+-- users who upgrade.
+
+ALTER TABLE muscle_group ADD COLUMN seed_key TEXT;
+
+ALTER TABLE muscle ADD COLUMN seed_key TEXT;
+
+-- Partial, because only seeded rows have a key and the lookup only ever asks for
+-- one. Unique so a seed key cannot name two rows: the sync trusts this to decide
+-- whether a row already exists.
+CREATE UNIQUE INDEX muscle_group_seed_key_unique ON muscle_group(seed_key)
+    WHERE seed_key IS NOT NULL;
+
+CREATE UNIQUE INDEX muscle_seed_key_unique ON muscle(seed_key)
+    WHERE seed_key IS NOT NULL;
+
+CREATE TABLE muscle_seed (
+    seed_key   TEXT NOT NULL PRIMARY KEY,
+    applied_at INTEGER NOT NULL
+);

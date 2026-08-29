@@ -23,6 +23,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncMuscleSeedUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorScreen
@@ -61,6 +63,7 @@ import myweeklyroutinegymapp.shared.generated.resources.muscle_edit
 import myweeklyroutinegymapp.shared.generated.resources.muscle_edit_group
 import myweeklyroutinegymapp.shared.generated.resources.muscle_new
 import myweeklyroutinegymapp.shared.generated.resources.muscle_new_group
+import myweeklyroutinegymapp.shared.generated.resources.muscle_seed_general
 import myweeklyroutinegymapp.shared.generated.resources.muscles_title
 import myweeklyroutinegymapp.shared.generated.resources.preferences_title
 import myweeklyroutinegymapp.shared.generated.resources.tab_activities
@@ -72,6 +75,7 @@ import myweeklyroutinegymapp.shared.generated.resources.weight_entry_new
 import myweeklyroutinegymapp.shared.generated.resources.weight_title
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import org.koin.compose.koinInject
 
 /**
  * The three top-level tabs.
@@ -336,12 +340,42 @@ private val ScreenStackSaver: Saver<List<Screen>, Any> = listSaver(
  * this `when`; what they cannot cover is the chrome around it — the app bar's title and
  * back arrow, and the tab row — which are only ever real on a device.
  */
+/**
+ * Puts the shipped muscle catalogue in place, and keeps its names in the device's
+ * language. See [SyncMuscleSeedUseCase] for what that means; this is only about
+ * *when*.
+ *
+ * ### Why the key is a translated string
+ * The obvious key is `Unit` — run once per composition. That is right for the install
+ * case and wrong for the language case: `getString` resolves against whatever language
+ * is current *when it runs*, so a sync that never runs again can only ever have
+ * written the language the app first started in.
+ *
+ * Both platforms do usually recompose from scratch after a language change, which
+ * would make `Unit` enough by accident. Keying on one of the seeded names instead
+ * makes it enough on purpose: the key is a string that changes exactly when the
+ * translations do, so the effect re-runs when — and only when — there is a
+ * retranslation to perform. Any of the twenty-nine names would do; this is the one
+ * that appears in all seven groups.
+ *
+ * The work itself is idempotent and writes nothing when there is nothing to change,
+ * so an extra run costs a handful of indexed reads.
+ */
+@Composable
+private fun SyncMuscleSeed() {
+    val sync = koinInject<SyncMuscleSeedUseCase>()
+    val languageKey = stringResource(Res.string.muscle_seed_general)
+    LaunchedEffect(languageKey) { sync() }
+}
+
 // TopAppBar is still experimental in the Kotlin/Native side of material3, the same
 // way DatePicker is (see WeekStrip) — the Android artifact stabilised it first.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App() {
     GymTheme {
+        SyncMuscleSeed()
+
         var backStack by rememberSaveable(stateSaver = ScreenStackSaver) {
             mutableStateOf(listOf<Screen>(Screen.WorkoutLog))
         }

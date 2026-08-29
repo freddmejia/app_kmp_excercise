@@ -102,7 +102,7 @@ class GymDatabaseMigrationTest {
         // Guards the migration files' existence. Each .sqm adds one; delete one and
         // this drops back, every installed app keeps its old database, never creates
         // the new table, and crashes on the first query against it.
-        assertEquals(4L, GymDatabase.Schema.version)
+        assertEquals(5L, GymDatabase.Schema.version)
     }
 
     @Test
@@ -117,8 +117,13 @@ class GymDatabaseMigrationTest {
 
         GymDatabase.Schema.migrate(migrated, 3, 4)
 
-        // Same columns as a fresh install, and no table gained or lost on the way.
+        // Same columns as a fresh install: nothing after step 4 touches this table.
         assertEquals(fresh.columnsOf("workout_session"), migrated.columnsOf("workout_session"))
+
+        // And the two paths converge once the remaining steps have run. Compared
+        // against Schema.version rather than a literal so that adding a migration
+        // extends this test instead of breaking it.
+        GymDatabase.Schema.migrate(migrated, 4, GymDatabase.Schema.version)
         assertEquals(fresh.tableNames(), migrated.tableNames())
     }
 
@@ -250,8 +255,56 @@ class GymDatabaseMigrationTest {
         assertTrue(!migrated.tableNames().contains("activity_muscle"))
 
         GymDatabase.Schema.migrate(migrated, 2, 3)
+        assertTrue(migrated.tableNames().contains("activity_muscle"))
+
+        // Full convergence only once every later step has run too — step 5 adds a
+        // table of its own. Keyed off Schema.version so a new migration extends this
+        // rather than breaking it.
+        GymDatabase.Schema.migrate(migrated, 3, GymDatabase.Schema.version)
+        assertEquals(fresh.tableNames(), migrated.tableNames())
+    }
+
+    @Test
+    fun migratingFromVersionFourAddsTheSeedColumnsAndLedger() {
+        // The upgrade path for anyone on the build that shipped no muscle catalogue —
+        // which is everyone, since this is the first version that ships one.
+        val fresh = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        GymDatabase.Schema.create(fresh)
+
+        val migrated = v1Database()
+        GymDatabase.Schema.migrate(migrated, 1, 4)
+        assertTrue(!migrated.tableNames().contains("muscle_seed"))
+        assertTrue(!migrated.columnsOf("muscle").contains("seed_key"))
+
+        GymDatabase.Schema.migrate(migrated, 4, 5)
 
         assertEquals(fresh.tableNames(), migrated.tableNames())
+        assertEquals(fresh.columnsOf("muscle"), migrated.columnsOf("muscle"))
+        assertEquals(fresh.columnsOf("muscle_group"), migrated.columnsOf("muscle_group"))
+    }
+
+    @Test
+    fun musclesThatPredateTheSeedReadAsTheUsersOwn() {
+        // The whole point of the column being nullable: a muscle already on a phone
+        // was typed by its owner, so it must come out of the migration with no seed
+        // key — otherwise the language sync would rename it out from under them.
+        val driver = v1Database()
+        driver.execute(null, "INSERT INTO muscle_group (name, is_archived, created_at) VALUES ('Pecho', 0, 0)", 0)
+        driver.execute(null, "INSERT INTO muscle (group_id, name, is_archived, created_at) VALUES (1, 'Superior', 0, 0)", 0)
+
+        GymDatabase.Schema.migrate(driver, 1, GymDatabase.Schema.version)
+        val db = createDatabase(driver)
+
+        val group = db.muscleCatalogQueries.selectAllGroups().executeAsOne()
+        assertEquals("Pecho", group.name)
+        assertNull(group.seed_key)
+
+        val muscle = db.muscleCatalogQueries.selectAllMuscles().executeAsOne()
+        assertEquals("Superior", muscle.name)
+        assertNull(muscle.seed_key)
+
+        // And the ledger starts empty, so the seed still has everything to insert.
+        assertTrue(db.muscleCatalogQueries.selectAppliedSeedKeys().executeAsList().isEmpty())
     }
 
     private fun JdbcSqliteDriver.tableNames(): List<String> = executeQuery(

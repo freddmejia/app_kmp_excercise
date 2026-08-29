@@ -4,6 +4,8 @@ import botix.dev.myweeklyroutinegymapp.domain.model.DeleteOutcome
 import botix.dev.myweeklyroutinegymapp.domain.model.Muscle
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleGroup
 import botix.dev.myweeklyroutinegymapp.domain.model.MusclePickerItem
+import botix.dev.myweeklyroutinegymapp.domain.model.SeedSyncResult
+import botix.dev.myweeklyroutinegymapp.domain.model.SeededGroup
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -48,4 +50,19 @@ interface MuscleCatalogRepository {
 
     /** Blocked while any session references this muscle. */
     suspend fun deleteMuscle(id: Long): DeleteOutcome
+
+    /**
+     * Brings the shipped catalogue into line with [groups], in one transaction.
+     *
+     * Idempotent and non-destructive, in both directions:
+     *
+     * - a seed row that has never been inserted is inserted;
+     * - a seed row that was inserted and then deleted stays deleted, because the
+     *   ledger remembers the key rather than the row;
+     * - a seed row still carrying its key has its name brought to the current
+     *   language, and one the user renamed no longer carries a key so it is left
+     *   alone;
+     * - nothing the user created is read, moved or touched.
+     */
+    suspend fun syncSeed(groups: List<SeededGroup>, now: Long): SeedSyncResult
 }

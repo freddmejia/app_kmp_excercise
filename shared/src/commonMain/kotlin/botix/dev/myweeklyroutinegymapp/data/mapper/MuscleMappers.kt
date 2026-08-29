@@ -13,6 +13,7 @@ internal fun Muscle_group.toDomain(): MuscleGroup = MuscleGroup(
     name = name,
     isArchived = is_archived,
     createdAt = created_at,
+    seedKey = seed_key,
 )
 
 internal fun MuscleEntity.toDomain(): MuscleModel = MuscleModel(
@@ -21,6 +22,7 @@ internal fun MuscleEntity.toDomain(): MuscleModel = MuscleModel(
     name = name,
     isArchived = is_archived,
     createdAt = created_at,
+    seedKey = seed_key,
 )
 
 internal fun SelectPickerByUsage.toDomain(): MusclePickerItem = MusclePickerItem(

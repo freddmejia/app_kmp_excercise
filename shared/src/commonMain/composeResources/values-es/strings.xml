@@ -181,6 +181,44 @@
     <string name="weight_msg_invalid">Introduce un peso mayor que cero.</string>
     <string name="chart_one_measurement">Una sola medida — todavía sin línea.</string>
 
+    <!-- ================= shipped muscle catalogue =================
+         Names of the muscles the app ships (see ResourceMuscleSeed). These are the
+         only strings that end up stored in the database rather than read straight
+         from here: a start-up pass writes them into muscle.name so every catalogue
+         query stays a plain name lookup, and rewrites them when the device language
+         changes. Editing one here therefore renames it on every device that has not
+         renamed it by hand.
+         Gym vocabulary, not anatomy-textbook vocabulary. -->
+    <string name="muscle_seed_general">General</string>
+    <string name="muscle_seed_chest">Pecho</string>
+    <string name="muscle_seed_chest_upper">Pecho superior</string>
+    <string name="muscle_seed_chest_middle">Pecho medio</string>
+    <string name="muscle_seed_chest_lower">Pecho inferior</string>
+    <string name="muscle_seed_back">Espalda</string>
+    <string name="muscle_seed_lats">Dorsales</string>
+    <string name="muscle_seed_traps">Trapecios</string>
+    <string name="muscle_seed_rhomboids">Romboides</string>
+    <string name="muscle_seed_lower_back">Lumbares</string>
+    <string name="muscle_seed_shoulders">Hombros</string>
+    <string name="muscle_seed_delt_front">Deltoides anterior</string>
+    <string name="muscle_seed_delt_side">Deltoides lateral</string>
+    <string name="muscle_seed_delt_rear">Deltoides posterior</string>
+    <string name="muscle_seed_arms">Brazos</string>
+    <string name="muscle_seed_biceps">Bíceps</string>
+    <string name="muscle_seed_triceps">Tríceps</string>
+    <string name="muscle_seed_forearms">Antebrazos</string>
+    <string name="muscle_seed_legs">Piernas</string>
+    <string name="muscle_seed_quads">Cuádriceps</string>
+    <string name="muscle_seed_hamstrings">Isquiotibiales</string>
+    <string name="muscle_seed_glutes">Glúteos</string>
+    <string name="muscle_seed_adductors">Aductores</string>
+    <string name="muscle_seed_calves">Gemelos</string>
+    <string name="muscle_seed_core">Core</string>
+    <string name="muscle_seed_abs_upper">Abdomen superior</string>
+    <string name="muscle_seed_abs_lower">Abdomen inferior</string>
+    <string name="muscle_seed_obliques">Oblicuos</string>
+    <string name="muscle_seed_neck">Cuello</string>
+
     <plurals name="plural_activities">
         <item quantity="one">%1$s actividad</item>
         <item quantity="other">%1$s actividades</item>
