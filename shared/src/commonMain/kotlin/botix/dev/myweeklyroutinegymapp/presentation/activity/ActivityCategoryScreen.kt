@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.categories_empty
@@ -58,7 +60,10 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorViewModel.Companion.NEW
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
+import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewCategoryUsage
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -269,5 +274,121 @@ private fun messageText(message: CategoryMessage): String = when (message) {
                 message.uncategorisedCount.toString(),
             ),
         )
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The populated list.
+ *
+ * The delete confirmation is behind local state and a swipe, so a static render cannot
+ * reach it — run the preview and drag a row left to see the dialog.
+ */
+@PreviewLightDark
+@Composable
+private fun ActivityCategoryContentPreview() {
+    PreviewSurface {
+        ActivityCategoryContent(
+            state = ActivityCategoryUiState(
+                categories = previewCategoryUsage,
+                isLoading = false,
+            ),
+            onEdit = {},
+            onArchive = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Empty")
+@Composable
+private fun ActivityCategoryContentEmptyPreview() {
+    PreviewSurface {
+        ActivityCategoryContent(
+            state = ActivityCategoryUiState(categories = emptyList(), isLoading = false),
+            onEdit = {},
+            onArchive = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Loading", heightDp = 200)
+@Composable
+private fun ActivityCategoryContentLoadingPreview() {
+    PreviewSurface {
+        ActivityCategoryContent(
+            state = ActivityCategoryUiState(),
+            onEdit = {},
+            onArchive = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * A row with an icon and a count, and one with neither.
+ *
+ * Zero is the case to look at: it reads "No activities" rather than "0 activities",
+ * and it is the only count that makes deleting the category a no-op for everything
+ * else.
+ */
+@PreviewLightDark
+@Composable
+private fun CategoryRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CategoryRow(
+                usage = previewCategoryUsage[0].let {
+                    it.copy(category = it.category.copy(icon = "🏋"))
+                },
+                onEdit = {},
+                onArchive = {},
+                onDelete = {},
+            )
+            CategoryRow(usage = previewCategoryUsage[1], onEdit = {}, onArchive = {}, onDelete = {})
+            CategoryRow(usage = previewCategoryUsage[2], onEdit = {}, onArchive = {}, onDelete = {})
+        }
+    }
+}
+
+/**
+ * Every message this screen can raise, as text.
+ *
+ * A snackbar shows one at a time and only after an action, so this is the only place
+ * the whole set can be read together — which is what catches a plural that does not
+ * agree, or a count-carrying message that reads worse than the plain one it replaces.
+ */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun CategoryMessagesPreview() {
+    val messages = listOf(
+        CategoryMessage.Saved,
+        CategoryMessage.NameBlank,
+        CategoryMessage.NameTaken,
+        CategoryMessage.Deleted(uncategorisedCount = 0),
+        CategoryMessage.Deleted(uncategorisedCount = 1),
+        CategoryMessage.Deleted(uncategorisedCount = 6),
+        CategoryMessage.Archived(uncategorisedCount = 0),
+        CategoryMessage.Archived(uncategorisedCount = 3),
+    )
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "CategoryMessage")
+            messages.forEach { message ->
+                Text(text = messageText(message), style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }

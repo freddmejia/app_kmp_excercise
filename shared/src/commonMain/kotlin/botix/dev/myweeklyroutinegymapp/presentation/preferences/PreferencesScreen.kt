@@ -13,7 +13,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.categories_title
@@ -97,6 +100,44 @@ private fun PreferenceRow(
                 // once rather than once for itself and once for an arrow.
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The whole screen, not a `…Content` half of one: holding no state is what lets this
+ * screen be previewed exactly as the app composes it.
+ */
+@PreviewLightDark
+@Composable
+private fun PreferencesScreenPreview() {
+    PreviewSurface {
+        PreferencesScreen(onOpenMuscles = {}, onOpenCategories = {})
+    }
+}
+
+@Preview
+@Composable
+private fun PreferenceRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PreferenceRow(
+                title = "Muscles",
+                hint = "The list the log screen offers you.",
+                onClick = {},
+            )
+            // A hint long enough to wrap: the chevron must stay on its own edge rather
+            // than being pushed off by the text beside it.
+            PreferenceRow(
+                title = "Categorías",
+                hint = "Cómo se agrupan tus actividades en la pestaña Actividades.",
+                onClick = {},
             )
         }
     }

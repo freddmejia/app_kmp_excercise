@@ -28,15 +28,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionEntry
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
+import botix.dev.myweeklyroutinegymapp.presentation.common.FormActionBar
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDistanceActivity
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewEmptySessionDetail
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewMuscleSections
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewScopedMuscleSections
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewSessionDetail
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewSessionEntries
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewStrengthActivity
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewUntrainedMuscles
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_save
 import myweeklyroutinegymapp.shared.generated.resources.log_distance_km
@@ -134,49 +147,68 @@ fun WorkoutEntryContent(
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // The app bar says whether this is a new log or an old one; it does not say
-        // *what* is being logged or *when*. Those two are what tell this log apart
-        // from every other, so they lead the screen — the same job the date does on
-        // the body-weight editor.
-        state.activity?.let { activity ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = listOfNotNull(activity.icon, activity.name).joinToString(" "),
-                    style = MaterialTheme.typography.headlineSmall,
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.weight(1f).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // The app bar says whether this is a new log or an old one; it does not say
+            // *what* is being logged or *when*. Those two are what tell this log apart
+            // from every other, so they lead the screen — the same job the date does on
+            // the body-weight editor.
+            state.activity?.let { activity ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = listOfNotNull(activity.icon, activity.name).joinToString(" "),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text(
+                        text = state.epochDay.asFullDate(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
+
+            when (state.form) {
+                WorkoutEntryForm.LOADING -> LoadingState(Modifier.weight(1f))
+
+                WorkoutEntryForm.STRENGTH -> StrengthLog(
+                    state = state,
+                    onSetShowAllMuscles = onSetShowAllMuscles,
+                    onCheck = onCheck,
+                    onSetSets = onSetSets,
+                    onUncheck = onUncheck,
+                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = state.epochDay.asFullDate(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+                WorkoutEntryForm.DISTANCE_TIME -> DistanceTimeLog(
+                    state = state,
+                    onDistanceChange = onDistanceChange,
+                    onDurationChange = onDurationChange,
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
 
-        MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
-
-        when (state.form) {
-            WorkoutEntryForm.LOADING -> LoadingState(Modifier.weight(1f))
-
-            WorkoutEntryForm.STRENGTH -> StrengthLog(
-                state = state,
-                onSetShowAllMuscles = onSetShowAllMuscles,
-                onCheck = onCheck,
-                onSetSets = onSetSets,
-                onUncheck = onUncheck,
-                modifier = Modifier.weight(1f),
-            )
-
-            WorkoutEntryForm.DISTANCE_TIME -> DistanceTimeLog(
-                state = state,
-                onDistanceChange = onDistanceChange,
-                onDurationChange = onDurationChange,
-                onSave = onSave,
-                modifier = Modifier.weight(1f),
-            )
+        // Only the distance form commits with a button. A strength log writes as it is
+        // filled in — checking a muscle *is* the write — so there is nothing there to
+        // save, and a permanently inert Save bar under it would be claiming otherwise.
+        if (state.form == WorkoutEntryForm.DISTANCE_TIME) {
+            FormActionBar {
+                Button(
+                    onClick = onSave,
+                    // Inert while both fields are empty. Anything else the form cannot
+                    // judge — the use case rules on it and the answer comes back as a
+                    // message.
+                    enabled = state.canSave,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(Res.string.common_save))
+                }
+            }
         }
     }
 }
@@ -198,13 +230,17 @@ private fun DistanceTimeLog(
     state: WorkoutEntryUiState,
     onDistanceChange: (String) -> Unit,
     onDurationChange: (String) -> Unit,
-    onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        // Scrollable for the same reason the weight form is: a large font scale plus
-        // an open keyboard can push the button below the fold, and a Save button you
-        // cannot reach is the one failure a form cannot afford.
+        // Only the fields are in here now. Save is pinned to the bottom of the
+        // *screen* by [WorkoutEntryContent], edge to edge, rather than sitting inside
+        // this form's own side margins — a bar with margins does not read as a bar.
+        //
+        // It used to be the last child of this scrolling column, on the reasoning that
+        // scrolling kept it reachable at a large font scale, which had it backwards:
+        // scrolling the button guarantees there is a position where it is off-screen.
+        // See `FormActionBar`.
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -224,15 +260,6 @@ private fun DistanceTimeLog(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(
-            onClick = onSave,
-            // Inert while both fields are empty. Anything else the form cannot judge
-            // — the use case rules on it and the answer comes back as a message.
-            enabled = state.canSave,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(Res.string.common_save))
-        }
     }
 }
 
@@ -490,4 +517,289 @@ private fun messageText(message: WorkoutEntryMessage): String = when (message) {
     WorkoutEntryMessage.InvalidSets -> stringResource(Res.string.log_msg_invalid_sets)
     WorkoutEntryMessage.ActivityNotFound -> stringResource(Res.string.log_msg_activity_missing)
     WorkoutEntryMessage.NothingMeasured -> stringResource(Res.string.log_msg_nothing_measured)
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/** Scoped to the activity's own muscles, which is how a strength log normally opens. */
+private val previewStrengthState = WorkoutEntryUiState(
+    epochDay = PREVIEW_TODAY,
+    activity = previewStrengthActivity,
+    form = WorkoutEntryForm.STRENGTH,
+    sessionId = 10,
+    sections = previewScopedMuscleSections,
+    isScopedToActivity = true,
+    detail = previewSessionDetail,
+    untrainedThisWeek = previewUntrainedMuscles,
+)
+
+private val previewDistanceState = WorkoutEntryUiState(
+    epochDay = PREVIEW_TODAY,
+    activity = previewDistanceActivity,
+    form = WorkoutEntryForm.DISTANCE_TIME,
+    distanceInput = "8.4",
+    durationInput = "44",
+)
+
+/**
+ * The strength form. There is no Save button and that is not an omission — checking a
+ * muscle *is* the write, and the session row was created when the screen opened.
+ */
+@PreviewLightDark
+@Composable
+private fun WorkoutEntryContentStrengthPreview() {
+    PreviewSurface {
+        WorkoutEntryContent(
+            state = previewStrengthState,
+            onCheck = {},
+            onSetSets = { _, _, _ -> },
+            onUncheck = {},
+            onSetShowAllMuscles = {},
+            onDistanceChange = {},
+            onDurationChange = {},
+            onSave = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * The distance form, from the same composable and the same state class. Which one
+ * appears is decided by the activity's measurement type alone — the user is never asked
+ * to classify something the app recorded when the activity was created.
+ */
+@PreviewLightDark
+@Composable
+private fun WorkoutEntryContentDistancePreview() {
+    PreviewSurface {
+        WorkoutEntryContent(
+            state = previewDistanceState,
+            onCheck = {},
+            onSetSets = { _, _, _ -> },
+            onUncheck = {},
+            onSetShowAllMuscles = {},
+            onDistanceChange = {},
+            onDurationChange = {},
+            onSave = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Loading", heightDp = 240)
+@Composable
+private fun WorkoutEntryContentLoadingPreview() {
+    PreviewSurface {
+        WorkoutEntryContent(
+            state = WorkoutEntryUiState(epochDay = PREVIEW_TODAY),
+            onCheck = {},
+            onSetSets = { _, _, _ -> },
+            onUncheck = {},
+            onSetShowAllMuscles = {},
+            onDistanceChange = {},
+            onDurationChange = {},
+            onSave = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** An empty form: both fields blank, so Save is inert. */
+@Preview(name = "Distance — nothing entered", heightDp = 320)
+@Composable
+private fun DistanceTimeLogEmptyPreview() {
+    PreviewSurface {
+        DistanceTimeLog(
+            state = previewDistanceState.copy(distanceInput = "", durationInput = ""),
+            onDistanceChange = {},
+            onDurationChange = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * One measure only. Both fields are individually optional and one of them is required —
+ * a swim with no distance and a route walked without timing it are both real records —
+ * so this has to be a savable state, not a half-filled one.
+ */
+@Preview(name = "Distance — time only", heightDp = 320)
+@Composable
+private fun DistanceTimeLogTimeOnlyPreview() {
+    PreviewSurface {
+        DistanceTimeLog(
+            state = previewDistanceState.copy(distanceInput = ""),
+            onDistanceChange = {},
+            onDurationChange = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * The picker widened to the whole catalogue.
+ *
+ * The banner is shown in both directions — narrowed *and* widened — so "why am I seeing
+ * everything?" has an answer on screen either way.
+ */
+@Preview(name = "Strength — all muscles")
+@Composable
+private fun StrengthLogAllMusclesPreview() {
+    PreviewSurface {
+        StrengthLog(
+            state = previewStrengthState.copy(
+                sections = previewMuscleSections,
+                isScopedToActivity = false,
+                showAllMuscles = true,
+            ),
+            onSetShowAllMuscles = {},
+            onCheck = {},
+            onSetSets = { _, _, _ -> },
+            onUncheck = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/** No catalogue at all: the hint points at Preferences, where muscles are created. */
+@Preview(name = "Strength — no muscles")
+@Composable
+private fun StrengthLogNoMusclesPreview() {
+    PreviewSurface {
+        StrengthLog(
+            state = previewStrengthState.copy(
+                sections = emptyList(),
+                isScopedToActivity = false,
+                detail = previewEmptySessionDetail,
+                untrainedThisWeek = emptyList(),
+            ),
+            onSetShowAllMuscles = {},
+            onCheck = {},
+            onSetSets = { _, _, _ -> },
+            onUncheck = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * Totals with volume, and totals at zero.
+ *
+ * Warmup is reported beside the effective total rather than folded into it, because it
+ * is deliberately excluded from volume. The ratio disappears at zero effective sets —
+ * it would be meaningless there rather than zero.
+ */
+@PreviewLightDark
+@Composable
+private fun TotalsCardPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TotalsCard(previewStrengthState)
+            TotalsCard(previewStrengthState.copy(detail = previewEmptySessionDetail))
+        }
+    }
+}
+
+/** Both directions of the banner, which are two different sentences and two buttons. */
+@Preview
+@Composable
+private fun MuscleScopeBannerPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MuscleScopeBanner(isScoped = true, onSetShowAllMuscles = {})
+            MuscleScopeBanner(isScoped = false, onSetShowAllMuscles = {})
+        }
+    }
+}
+
+/**
+ * Unchecked, checked, and checked with no warmup.
+ *
+ * The last is the one that matters: the warmup stepper's decrement is disabled at zero,
+ * while the effective stepper's decrement at one is *enabled* and unchecks the muscle
+ * instead — dropping below one effective set means it was not trained, which is a
+ * correct interpretation rather than an error.
+ */
+@PreviewLightDark
+@Composable
+private fun MuscleRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MuscleRow(
+                name = "Lower chest",
+                entry = null,
+                onCheck = {},
+                onSetSets = { _, _ -> },
+                onUncheck = {},
+            )
+            MuscleRow(
+                name = "Upper chest",
+                entry = previewSessionEntries[1],
+                onCheck = {},
+                onSetSets = { _, _ -> },
+                onUncheck = {},
+            )
+            MuscleRow(
+                name = "General",
+                entry = previewSessionEntries[0].copy(effectiveSets = 1, warmupSets = 0),
+                onCheck = {},
+                onSetSets = { _, _ -> },
+                onUncheck = {},
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun SetsStepperPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SetsStepper(label = "Effective", value = 6, onDecrement = {}, onIncrement = {})
+            SetsStepper(
+                label = "Warmup",
+                value = 0,
+                onDecrement = {},
+                onIncrement = {},
+                decrementEnabled = false,
+            )
+        }
+    }
+}
+
+/** Every message this screen can raise, in one place, per locale. */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun WorkoutEntryMessagesPreview() {
+    val messages = listOf(
+        WorkoutEntryMessage.Logged,
+        WorkoutEntryMessage.Removed,
+        WorkoutEntryMessage.InvalidSets,
+        WorkoutEntryMessage.ActivityNotFound,
+        WorkoutEntryMessage.NothingMeasured,
+    )
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "WorkoutEntryMessage")
+            messages.forEach { message ->
+                Text(text = messageText(message), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }

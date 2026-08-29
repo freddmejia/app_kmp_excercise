@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_all
@@ -68,6 +70,11 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
 import botix.dev.myweeklyroutinegymapp.presentation.common.signed1
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewChart
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewWeekWeights
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewWeightHistory
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -426,4 +433,212 @@ private fun HistoryRow(
 @Composable
 private fun messageText(message: BodyWeightMessage): String = when (message) {
     BodyWeightMessage.Deleted -> stringResource(Res.string.common_deleted)
+}
+
+// --- Previews ---------------------------------------------------------------
+
+private val previewWeightState = BodyWeightUiState(
+    chart = previewChart,
+    history = previewWeightHistory,
+    preset = BodyWeightRangePreset.LAST_30_DAYS,
+    selectedDay = PREVIEW_TODAY,
+    today = PREVIEW_TODAY,
+    weekEntries = previewWeekWeights,
+    isLoading = false,
+)
+
+/**
+ * The reading screen with data: summary, chart and history under a pinned strip.
+ *
+ * The selected day already holds a reading, so the strip's button reads **Replace** —
+ * there is one reading per day, and a button promising "Log" before the press would be
+ * promising the wrong thing.
+ *
+ * The delete confirmation is behind a swipe and local state, so it does not appear in a
+ * static render; run the preview and drag a history row left.
+ */
+@PreviewLightDark
+@Composable
+private fun BodyWeightContentPreview() {
+    PreviewSurface {
+        BodyWeightContent(
+            state = previewWeightState,
+            onSelectPreset = {},
+            onOpenEntry = { _, _ -> },
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** A day with nothing on it: the button reads Log rather than Replace. */
+@Preview(name = "Day with no reading")
+@Composable
+private fun BodyWeightContentUnloggedDayPreview() {
+    PreviewSurface {
+        BodyWeightContent(
+            state = previewWeightState.copy(selectedDay = PREVIEW_TODAY - 1),
+            onSelectPreset = {},
+            onOpenEntry = { _, _ -> },
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * A future day. The button goes inert and the line underneath says why — a control that
+ * stops working without explaining itself is the thing that line exists to prevent.
+ */
+@Preview(name = "Future day selected")
+@Composable
+private fun BodyWeightContentFutureDayPreview() {
+    PreviewSurface {
+        BodyWeightContent(
+            state = previewWeightState.copy(selectedDay = PREVIEW_TODAY + 2),
+            onSelectPreset = {},
+            onOpenEntry = { _, _ -> },
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** Nothing logged ever: the summary reads "no data" rather than a weight of zero. */
+@Preview(name = "Empty")
+@Composable
+private fun BodyWeightContentEmptyPreview() {
+    PreviewSurface {
+        BodyWeightContent(
+            state = BodyWeightUiState(
+                selectedDay = PREVIEW_TODAY,
+                today = PREVIEW_TODAY,
+                isLoading = false,
+            ),
+            onSelectPreset = {},
+            onOpenEntry = { _, _ -> },
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Loading", heightDp = 200)
+@Composable
+private fun BodyWeightContentLoadingPreview() {
+    PreviewSurface {
+        BodyWeightContent(
+            state = BodyWeightUiState(selectedDay = PREVIEW_TODAY, today = PREVIEW_TODAY),
+            onSelectPreset = {},
+            onOpenEntry = { _, _ -> },
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * Populated and empty.
+ *
+ * Every figure on this card is nullable by design, and the empty case is the one that
+ * proves it: an empty range genuinely has no current weight, and a 0.0 here would read
+ * as somebody weighing nothing.
+ */
+@PreviewLightDark
+@Composable
+private fun SummaryCardPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SummaryCard(previewWeightState)
+            SummaryCard(BodyWeightUiState(isLoading = false))
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun PresetRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PresetRow(selected = BodyWeightRangePreset.LAST_30_DAYS, onSelectPreset = {})
+            PresetRow(selected = BodyWeightRangePreset.ALL, onSelectPreset = {})
+        }
+    }
+}
+
+/**
+ * A row with a note and a delta, one without either, and the oldest row on screen.
+ *
+ * The oldest is the case worth keeping: it shows no delta at all, because the other
+ * half of that subtraction is outside the range and a difference the user cannot see
+ * the source of is worse than no difference.
+ */
+@PreviewLightDark
+@Composable
+private fun HistoryRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HistoryRow(
+                entry = previewWeightHistory[0],
+                previous = previewWeightHistory[1],
+                onOpen = {},
+                onDelete = {},
+            )
+            HistoryRow(
+                entry = previewWeightHistory[1],
+                previous = previewWeightHistory[2],
+                onOpen = {},
+                onDelete = {},
+            )
+            HistoryRow(
+                entry = previewWeightHistory.last(),
+                previous = null,
+                onOpen = {},
+                onDelete = {},
+            )
+        }
+    }
+}
+
+/** One message, but it is still the only place to read its wording per locale. */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun BodyWeightMessagesPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "BodyWeightMessage")
+            Text(
+                text = messageText(BodyWeightMessage.Deleted),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }

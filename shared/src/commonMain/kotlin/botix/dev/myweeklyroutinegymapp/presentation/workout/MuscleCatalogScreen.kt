@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_add
@@ -53,6 +55,10 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
+import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewMuscleGroups
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewMusclesByGroup
 import botix.dev.myweeklyroutinegymapp.presentation.workout.MuscleEditorViewModel.Companion.NEW
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -218,4 +224,117 @@ private fun messageText(message: MuscleCatalogMessage): String = when (message) 
             message.referenceCount.toString(),
         ),
     )
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The catalogue as it normally looks: groups as cards, leaves inside them, and every
+ * name a button that opens the editor.
+ *
+ * Nothing here says "tap the name to rename it" in text — the click label does, for a
+ * screen reader — so this preview is where that affordance has to be judged by eye.
+ */
+@PreviewLightDark
+@Composable
+private fun MuscleCatalogContentPreview() {
+    PreviewSurface {
+        MuscleCatalogContent(
+            state = MuscleCatalogUiState(
+                groups = previewMuscleGroups,
+                musclesByGroup = previewMusclesByGroup,
+                isLoading = false,
+            ),
+            onEditGroup = {},
+            onEditMuscle = { _, _ -> },
+            onArchiveMuscle = { _, _ -> },
+            onDeleteMuscle = {},
+            onDeleteGroup = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * A group with no leaves. It cannot be logged against at all — a session always points
+ * at a leaf, never at a group — so the card says so rather than looking merely short.
+ */
+@Preview(name = "Group with no leaves")
+@Composable
+private fun MuscleCatalogContentEmptyGroupPreview() {
+    PreviewSurface {
+        MuscleCatalogContent(
+            state = MuscleCatalogUiState(
+                groups = previewMuscleGroups.take(1),
+                musclesByGroup = emptyMap(),
+                isLoading = false,
+            ),
+            onEditGroup = {},
+            onEditMuscle = { _, _ -> },
+            onArchiveMuscle = { _, _ -> },
+            onDeleteMuscle = {},
+            onDeleteGroup = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Empty catalogue")
+@Composable
+private fun MuscleCatalogContentEmptyPreview() {
+    PreviewSurface {
+        MuscleCatalogContent(
+            state = MuscleCatalogUiState(isLoading = false),
+            onEditGroup = {},
+            onEditMuscle = { _, _ -> },
+            onArchiveMuscle = { _, _ -> },
+            onDeleteMuscle = {},
+            onDeleteGroup = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Loading", heightDp = 200)
+@Composable
+private fun MuscleCatalogContentLoadingPreview() {
+    PreviewSurface {
+        MuscleCatalogContent(
+            state = MuscleCatalogUiState(),
+            onEditGroup = {},
+            onEditMuscle = { _, _ -> },
+            onArchiveMuscle = { _, _ -> },
+            onDeleteMuscle = {},
+            onDeleteGroup = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * Every message, including the refusal: a muscle referenced by history cannot be
+ * deleted, and the count is what makes that refusal explicable rather than arbitrary.
+ */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun MuscleCatalogMessagesPreview() {
+    val messages = listOf(
+        MuscleCatalogMessage.Saved,
+        MuscleCatalogMessage.BlankName,
+        MuscleCatalogMessage.Deleted,
+        MuscleCatalogMessage.DeleteBlocked(referenceCount = 1),
+        MuscleCatalogMessage.DeleteBlocked(referenceCount = 37),
+    )
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "MuscleCatalogMessage")
+            messages.forEach { message ->
+                Text(text = messageText(message), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }

@@ -8,17 +8,23 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,8 +41,11 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import botix.dev.myweeklyroutinegymapp.presentation.theme.LocalGymAccents
 import kotlinx.coroutines.launch
@@ -113,6 +122,52 @@ fun ScreenActions(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         actions()
+    }
+}
+
+/**
+ * The pinned footer a form's primary action sits in.
+ *
+ * ### Why the button leaves the form
+ * It used to be the last child of the form's own scrolling column, which meant Save
+ * scrolled away with everything else. On a short form that is invisible; on a long one —
+ * the activity editor with a muscle catalogue in it — or at a large font scale with the
+ * keyboard open, the one control that commits the form is somewhere below the fold, and
+ * the user has to scroll past what they were typing to reach it.
+ *
+ * The old comment on those forms said the opposite: *scrollable rather than fixed, so a
+ * large font scale cannot leave the button below the fold.* That reasoning was upside
+ * down. Scrolling the button does not keep it reachable, it only guarantees there is a
+ * scroll position where it is not — pinning it is what makes it always reachable, and
+ * costs the form one bar's height instead.
+ *
+ * ### Why it is a bar and not a floating button
+ * It is a sibling of the scrolling area, not an overlay on it: the scroll viewport ends
+ * where this begins, so nothing is ever hidden underneath and the form needs no bottom
+ * padding to compensate. [MaterialTheme.colorScheme.surfaceContainer] is the same role
+ * the app bar and the navigation bar take, because this is the third bar framing the
+ * screen and the three should sit at the same step above it.
+ *
+ * The keyboard is already handled a level up: the root `Scaffold` carries `imePadding()`,
+ * so this rides above the keyboard rather than behind it.
+ *
+ * A slot rather than a Save button, for the same reason [ScreenActions] is one — the
+ * label and the enablement rule belong to the screen, not to its chrome.
+ */
+@Composable
+fun FormActionBar(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content,
+        )
     }
 }
 
@@ -327,3 +382,160 @@ fun Double.signed1(): String = if (this >= 0) "+${format1()}" else format1()
  * A genuine 20.5 keeps its half.
  */
 fun Double.formatMeasure(): String = format1().removeSuffix(".0")
+
+// --- Previews ---------------------------------------------------------------
+
+@PreviewLightDark
+@Composable
+private fun EmptyStatePreview() {
+    PreviewSurface {
+        Column(modifier = Modifier.padding(16.dp)) {
+            EmptyState(text = "No activities yet.")
+            // The hinted variant is the one worth checking: the two lines must read as
+            // one message, not as a message with an unrelated caption under it.
+            EmptyState(
+                text = "No muscles in this group.",
+                hint = "Add them from the Preferences tab's Muscles screen.",
+            )
+        }
+    }
+}
+
+/**
+ * The wrap this component exists for.
+ *
+ * The English labels fit on one line; the Spanish ones do not, and a `Row` would
+ * measure the trailing button to zero rather than wrap it — which is how the New-log
+ * button once disappeared. Both are previewed side by side so that the wrap is visible
+ * as a normal state and not as damage.
+ */
+@Preview(name = "Fits on one line", widthDp = 360)
+@Preview(name = "Wraps", widthDp = 240)
+@Composable
+private fun ScreenActionsPreview() {
+    PreviewSurface {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ScreenActions {
+                TextButton(onClick = {}) { Text("Muscles") }
+                TextButton(onClick = {}) { Text("New log") }
+            }
+            ScreenActions {
+                TextButton(onClick = {}) { Text("Músculos") }
+                TextButton(onClick = {}) { Text("Nuevo registro") }
+            }
+        }
+    }
+}
+
+/**
+ * The bar against a scrolling body, which is the only way to judge it: on its own it is
+ * a button in a box, and what matters is that it reads as pinned *above* content that
+ * runs out underneath it.
+ *
+ * The disabled state is here too, because it is the one a form opens in.
+ */
+@PreviewLightDark
+@Composable
+private fun FormActionBarPreview() {
+    PreviewSurface {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.weight(1f).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                repeat(6) { index -> Text("Form field ${index + 1}") }
+            }
+            FormActionBar {
+                Text(
+                    text = "Save is pinned; the fields above scroll.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Interactive mode only.
+ *
+ * The snackbar is raised from a `LaunchedEffect`, and the static renderer composes one
+ * frame without running effects — so this shows an empty scaffold until the preview is
+ * run. That is the component working as designed, not a broken preview.
+ */
+@Preview(heightDp = 200)
+@Composable
+private fun MessageSnackbarPreview() {
+    PreviewSurface {
+        Scaffold(
+            snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
+        ) { innerPadding ->
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                MessageSnackbar(text = "Log deleted", onConsume = {})
+            }
+        }
+    }
+}
+
+/**
+ * At rest, which is the only state a static preview can show: the red backdrop is
+ * painted while the row is displaced, and nothing displaces it without a drag. Run the
+ * preview to swipe it.
+ */
+@PreviewLightDark
+@Composable
+private fun SwipeToDeletePreview() {
+    PreviewSurface {
+        Box(modifier = Modifier.padding(16.dp)) {
+            SwipeToDelete(label = "Delete", onDelete = {}) {
+                Card {
+                    Text(text = "Push day", modifier = Modifier.padding(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Preview(heightDp = 160)
+@Composable
+private fun LoadingStatePreview() {
+    PreviewSurface { LoadingState() }
+}
+
+@PreviewLightDark
+@Composable
+private fun SectionHeaderPreview() {
+    PreviewSurface {
+        Column(modifier = Modifier.padding(16.dp)) {
+            SectionHeader(text = "Chest")
+            Text(text = "Upper chest", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/**
+ * The number formatters, rendered rather than asserted.
+ *
+ * They are not composables, so this is the only place the preview panel can show what
+ * they do — and the rounding carry (9.97 renders as "10.0", never "9.10") and the
+ * trailing-zero trim are exactly the cases that read wrong at a glance in a test.
+ */
+@Preview
+@Composable
+private fun FormattersPreview() {
+    val samples = listOf(81.44, 9.97, -2.05, 45.0, 20.5, 0.0)
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "format1 / signed1 / formatMeasure")
+            samples.forEach { value ->
+                Text(
+                    text = "$value  ->  ${value.format1()}   ${value.signed1()}   ${value.formatMeasure()}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}

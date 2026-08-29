@@ -17,11 +17,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
 import botix.dev.myweeklyroutinegymapp.presentation.common.format1
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_save
 import myweeklyroutinegymapp.shared.generated.resources.weight_already
@@ -184,5 +188,102 @@ fun BodyWeightEntryContent(
         ) {
             Text(stringResource(Res.string.common_save))
         }
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * A new reading: the warning line is the neutral "one per day", and Save is inert
+ * until a number is typed.
+ */
+@PreviewLightDark
+@Composable
+private fun BodyWeightEntryContentPreview() {
+    PreviewSurface {
+        BodyWeightEntryContent(
+            state = BodyWeightEntryUiState(epochDay = PREVIEW_TODAY, isLoading = false),
+            onWeightChange = {},
+            onNoteChange = {},
+            onSave = {},
+        )
+    }
+}
+
+/**
+ * A correction. The three-way line is the point of this one: it is the only warning
+ * that arrives *before* the press, and saying "this replaces 82.1 kg" afterwards would
+ * be saying it too late.
+ */
+@Preview(name = "Replacing an existing reading")
+@Composable
+private fun BodyWeightEntryContentExistingPreview() {
+    PreviewSurface {
+        BodyWeightEntryContent(
+            state = BodyWeightEntryUiState(
+                epochDay = PREVIEW_TODAY,
+                weightInput = "81.4",
+                note = "Before breakfast",
+                existingKg = 82.1,
+                isLoading = false,
+            ),
+            onWeightChange = {},
+            onNoteChange = {},
+            onSave = {},
+        )
+    }
+}
+
+/** A day that has not happened yet: the line turns to `error` and Save stays inert. */
+@Preview(name = "Future day")
+@Composable
+private fun BodyWeightEntryContentFuturePreview() {
+    PreviewSurface {
+        BodyWeightEntryContent(
+            state = BodyWeightEntryUiState(
+                epochDay = PREVIEW_TODAY + 3,
+                isFuture = true,
+                isLoading = false,
+            ),
+            onWeightChange = {},
+            onNoteChange = {},
+            onSave = {},
+        )
+    }
+}
+
+/**
+ * A number the domain refuses. Worth its own preview because two explanations are now
+ * on screen at once — the warning above the field and the error under it — and they
+ * have to read as one thing being wrong, not two.
+ */
+@Preview(name = "Invalid weight")
+@Composable
+private fun BodyWeightEntryContentInvalidPreview() {
+    PreviewSurface {
+        BodyWeightEntryContent(
+            state = BodyWeightEntryUiState(
+                epochDay = PREVIEW_TODAY,
+                weightInput = "0",
+                isLoading = false,
+                error = BodyWeightEntryError.InvalidWeight,
+            ),
+            onWeightChange = {},
+            onNoteChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(heightDp = 200)
+@Composable
+private fun BodyWeightEntryContentLoadingPreview() {
+    PreviewSurface {
+        BodyWeightEntryContent(
+            state = BodyWeightEntryUiState(epochDay = PREVIEW_TODAY),
+            onWeightChange = {},
+            onNoteChange = {},
+            onSave = {},
+        )
     }
 }

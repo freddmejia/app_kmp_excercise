@@ -21,6 +21,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.activities_archived_badge
@@ -64,12 +66,18 @@ import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityEditorViewModel.Companion.NEW
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
 import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
 import botix.dev.myweeklyroutinegymapp.presentation.common.formatMeasure
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.asFullDate
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewActivities
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewCategories
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDayVolume
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDaysWithSessions
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewMusclesByActivity
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -114,13 +122,6 @@ fun ActivityListContent(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenActions {
-            // Categories moved to Settings with the muscle catalogue: this screen
-            // *uses* categories to filter, and the row below is where that happens;
-            // editing the list of them is a different job in a different place.
-            Button(onClick = { onEdit(NEW) }) { Text(stringResource(Res.string.common_new)) }
-        }
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActivityFilter.entries.forEach { filter ->
                 FilterChip(
@@ -151,7 +152,22 @@ fun ActivityListContent(
             onSelectDay = onSelectDay,
             onStepWeek = onStepWeek,
             onGoToToday = onGoToToday,
-        )
+        ) {
+            // In the strip's trailing slot, level with the date, so New sits at the
+            // same height on this tab as it does on the Log tab and on Weight. The
+            // three day-strip screens now put their one creating control in one place,
+            // and moving between tabs stops moving the button.
+            //
+            // Unlike the other two, this one is *not* about the selected day — a new
+            // activity belongs to the catalogue, not to a date. The day still matters
+            // to the list below, which splits on it, so the strip is not decoration
+            // here; but the button beside it reaches past the day rather than into it.
+            //
+            // Categories moved to Preferences with the muscle catalogue: this screen
+            // *uses* categories to filter, and the row above is where that happens;
+            // editing the list of them is a different job in a different place.
+            Button(onClick = { onEdit(NEW) }) { Text(stringResource(Res.string.common_new)) }
+        }
 
         MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
@@ -435,4 +451,256 @@ private fun ActivityFilter.label(): StringResource = when (this) {
     ActivityFilter.ACTIVE -> Res.string.activity_filter_active
     ActivityFilter.ARCHIVED -> Res.string.activity_filter_archived
     ActivityFilter.ALL -> Res.string.activity_filter_all
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/** The state to read this screen from: a day with both halves of the split on it. */
+private val previewListState = ActivityListUiState(
+    activities = previewActivities.filter { !it.isArchived },
+    categories = previewCategories,
+    musclesByActivity = previewMusclesByActivity,
+    selectedDay = PREVIEW_TODAY,
+    today = PREVIEW_TODAY,
+    daysWithSessions = previewDaysWithSessions,
+    dayVolume = previewDayVolume,
+    isLoading = false,
+)
+
+/**
+ * The split the day strip drives: what was trained on the selected day, then what was
+ * not, each under its own header.
+ *
+ * Both halves have to be here at once, because the headers appear only when both do —
+ * with everything trained, a header would label a division that is not there.
+ */
+@PreviewLightDark
+@Composable
+private fun ActivityListContentPreview() {
+    PreviewSurface {
+        ActivityListContent(
+            state = previewListState,
+            onSelectFilter = {},
+            onSelectCategory = {},
+            onEdit = {},
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onSetArchived = { _, _ -> },
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * A day nothing was trained on.
+ *
+ * The catalogue is deliberately *not* listed here: a header saying "nothing trained"
+ * above a full list is a header the eye does not believe. The cost is that no row is
+ * reachable on such a day, which is why the hint points at New in the header rather
+ * than at the list.
+ */
+@Preview(name = "Nothing trained that day")
+@Composable
+private fun ActivityListContentUntrainedDayPreview() {
+    PreviewSurface {
+        ActivityListContent(
+            state = previewListState.copy(dayVolume = emptyMap()),
+            onSelectFilter = {},
+            onSelectCategory = {},
+            onEdit = {},
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onSetArchived = { _, _ -> },
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** No activities at all, and no categories — the first screen a new user sees. */
+@Preview(name = "Empty catalogue")
+@Composable
+private fun ActivityListContentEmptyPreview() {
+    PreviewSurface {
+        ActivityListContent(
+            state = ActivityListUiState(
+                selectedDay = PREVIEW_TODAY,
+                today = PREVIEW_TODAY,
+                isLoading = false,
+            ),
+            onSelectFilter = {},
+            onSelectCategory = {},
+            onEdit = {},
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onSetArchived = { _, _ -> },
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** Filtered to a category that holds nothing: a different empty message from the above. */
+@Preview(name = "Empty in category")
+@Composable
+private fun ActivityListContentEmptyInCategoryPreview() {
+    PreviewSurface {
+        ActivityListContent(
+            state = previewListState.copy(
+                activities = emptyList(),
+                categorySelection = CategorySelection.Of(3),
+            ),
+            onSelectFilter = {},
+            onSelectCategory = {},
+            onEdit = {},
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onSetArchived = { _, _ -> },
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+@Preview(name = "Loading")
+@Composable
+private fun ActivityListContentLoadingPreview() {
+    PreviewSurface {
+        ActivityListContent(
+            state = ActivityListUiState(selectedDay = PREVIEW_TODAY, today = PREVIEW_TODAY),
+            onSelectFilter = {},
+            onSelectCategory = {},
+            onEdit = {},
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onSetArchived = { _, _ -> },
+            onDelete = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** Scrollable rather than wrapping: a long catalogue must not clip silently. */
+@Preview
+@Composable
+private fun CategoryFilterRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CategoryFilterRow(
+                categories = previewCategories,
+                selection = CategorySelection.All,
+                onSelect = {},
+            )
+            CategoryFilterRow(
+                categories = previewCategories,
+                selection = CategorySelection.Uncategorised,
+                onSelect = {},
+            )
+            CategoryFilterRow(
+                categories = previewCategories,
+                selection = CategorySelection.Of(2),
+                onSelect = {},
+            )
+        }
+    }
+}
+
+/**
+ * Every shape the subtitle line can take.
+ *
+ * It is assembled from three optional parts joined by "·", and the parts that drop out
+ * are as important as the ones that stay: a muscle count is absent rather than zero for
+ * a non-strength activity, and the volume line follows what was *measured* rather than
+ * the activity's declared type, so a session logged before a type change still reads
+ * correctly.
+ */
+@PreviewLightDark
+@Composable
+private fun ActivityRowPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Strength, trained today, with muscles linked and a category.
+            ActivityRow(
+                activity = previewActivities[0],
+                categoryName = "Strength",
+                muscleCount = 3,
+                dayVolume = previewDayVolume[1L],
+                onEdit = {},
+                onSetArchived = { _, _ -> },
+                onDelete = {},
+            )
+            // Distance and time: kilometres and minutes, not sets.
+            ActivityRow(
+                activity = previewActivities[2],
+                categoryName = "Cardio",
+                muscleCount = 0,
+                dayVolume = previewDayVolume[3L],
+                onEdit = {},
+                onSetArchived = { _, _ -> },
+                onDelete = {},
+            )
+            // Uncategorised, untrained, and of a type that has no muscles at all.
+            ActivityRow(
+                activity = previewActivities[3],
+                categoryName = null,
+                muscleCount = 0,
+                dayVolume = null,
+                onEdit = {},
+                onSetArchived = { _, _ -> },
+                onDelete = {},
+            )
+            // Archived: the badge, and Archive reading "Unarchive".
+            ActivityRow(
+                activity = previewActivities[4],
+                categoryName = "Strength",
+                muscleCount = 2,
+                dayVolume = null,
+                onEdit = {},
+                onSetArchived = { _, _ -> },
+                onDelete = {},
+            )
+        }
+    }
+}
+
+/** Both messages, including the refusal that keeps a swiped row on screen. */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun ActivityMessagesPreview() {
+    val messages = listOf(
+        ActivityMessage.Deleted,
+        ActivityMessage.DeleteBlocked(sessionCount = 1),
+        ActivityMessage.DeleteBlocked(sessionCount = 24),
+    )
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "ActivityMessage")
+            messages.forEach { message ->
+                Text(text = messageText(message), style = MaterialTheme.typography.bodySmall)
+            }
+            SectionHeader(text = "Filters and measurement types")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActivityFilter.entries.forEach { Text(stringResource(it.label())) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MeasurementType.entries.forEach { Text(it.label()) }
+            }
+        }
+    }
 }

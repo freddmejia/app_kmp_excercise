@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,12 +13,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.chart_one_measurement
 import org.jetbrains.compose.resources.stringResource
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightChart
 import botix.dev.myweeklyroutinegymapp.domain.model.BodyWeightPoint
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewChart
 
 /**
  * The two-layer chart the spec calls for: raw daily readings drawn faintly, with the
@@ -85,5 +91,63 @@ fun WeightChart(
             if (index == 0) path.moveTo(offset.x, offset.y) else path.lineTo(offset.x, offset.y)
         }
         drawPath(path = path, color = lineColor, style = Stroke(width = 3f))
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The two layers, which is the whole point of this component: the faint raw dots have
+ * to be visible enough to show the daily swing and quiet enough that the smoothed line
+ * is what the eye follows. That balance is a matter of alpha against the scheme's own
+ * background, so it is checked in both.
+ */
+@PreviewLightDark
+@Composable
+private fun WeightChartPreview() {
+    PreviewSurface {
+        WeightChart(chart = previewChart, modifier = Modifier.padding(16.dp))
+    }
+}
+
+/** One reading: no span to scale against, so the chart says so instead of drawing. */
+@Preview(name = "Single measurement")
+@Composable
+private fun WeightChartSinglePreview() {
+    PreviewSurface {
+        WeightChart(
+            chart = previewChart.copy(
+                raw = listOf(BodyWeightPoint(epochDay = PREVIEW_TODAY, weightKg = 81.4)),
+                smoothed = emptyList(),
+            ),
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * A flat series. The span would be zero and the projection would divide by it; the
+ * padded span centres the line instead, and this is where that shows.
+ */
+@Preview(name = "Flat series")
+@Composable
+private fun WeightChartFlatPreview() {
+    val flat = (0..9).map {
+        BodyWeightPoint(epochDay = PREVIEW_TODAY - (9 - it) * 2L, weightKg = 80.0)
+    }
+    PreviewSurface {
+        WeightChart(
+            chart = previewChart.copy(raw = flat, smoothed = flat),
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/** Empty draws nothing at all, so this preview is deliberately a blank box. */
+@Preview(name = "Empty", heightDp = 80)
+@Composable
+private fun WeightChartEmptyPreview() {
+    PreviewSurface {
+        WeightChart(chart = BodyWeightChart.empty(), modifier = Modifier.padding(16.dp))
     }
 }

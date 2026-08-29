@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,7 +35,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_WEEK_START
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDaysWithSessions
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewWeek
 import kotlinx.datetime.LocalDate
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_cancel
@@ -105,11 +113,19 @@ fun weekOf(day: Long): List<Long> = weekStartOf(day).let { start -> (start..star
  *
  * [markedDays] get a dot — the days something was logged.
  *
- * [trailing] fills the far end of the date row, opposite the date itself. It is where
- * a screen puts the one action that acts on the selected day — the body-weight screen
- * puts its log button there — because the date is that action's subject. It is empty
- * for the screens that have no such action, and the row then looks exactly as it did
- * before.
+ * [trailing] fills the far end of the date row, opposite the date itself, centred
+ * against it. It is where a screen puts its one creating control, and all three screens
+ * with a strip now use it: Log puts New log there, Activities puts New, Weight puts
+ * Log/Replace. Level with the date on every tab, so switching tabs does not move the
+ * button — a control that lands somewhere different on each screen has to be found
+ * again each time.
+ *
+ * For two of the three the date is also the action's *subject*: the log and the reading
+ * are written against the selected day. A new activity is not — it belongs to the
+ * catalogue — and it sits here for the alignment alone.
+ *
+ * The slot is still empty by default, and a strip with nothing in it renders exactly as
+ * it did before the slot existed.
  */
 @Composable
 fun WeekStrip(
@@ -140,7 +156,19 @@ fun WeekStrip(
         ) {
             // The date and its caret travel together: they are two targets on one
             // subject, and a gap opening between them would read as two controls.
+            //
+            // Weighted, and `fill = false`, so it takes its natural width while there
+            // is room and gives way when there is not. A Row measures its unweighted
+            // children first and hands each of them everything still unclaimed, so
+            // without this the date — first in the row, and as long as the locale
+            // makes it — would be measured against the full width and [trailing] would
+            // get whatever survived. At a large font scale that is nothing: the button
+            // would be measured to zero and vanish from the tree, no pixels and no tap
+            // target, which is exactly how the New-log button disappeared out of the
+            // old header Row. `fill = false` keeps today's layout unchanged; the date
+            // now wraps under pressure instead of starving the control beside it.
             Row(
+                modifier = Modifier.weight(1f, fill = false),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -433,5 +461,214 @@ fun weekLabelOf(day: Long): String {
             Res.string.week_range_same_month,
             startDate.day.toString(), endDate.day.toString(), startMonth, endDate.year.toString(),
         )
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The strip as the log and activity screens use it: no trailing content, so the date
+ * row looks exactly as it did before that slot existed.
+ */
+@PreviewLightDark
+@Composable
+private fun WeekStripPreview() {
+    PreviewSurface {
+        WeekStrip(
+            selectedDay = PREVIEW_TODAY,
+            today = PREVIEW_TODAY,
+            visibleDays = previewWeek,
+            markedDays = previewDaysWithSessions,
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * Browsed away from today, which is the state the outlined cell exists for: the
+ * selection has moved to Friday and today is still findable behind its border.
+ */
+@Preview
+@Composable
+private fun WeekStripBrowsedPreview() {
+    PreviewSurface {
+        WeekStrip(
+            selectedDay = PREVIEW_WEEK_START + 4,
+            today = PREVIEW_TODAY,
+            visibleDays = previewWeek,
+            markedDays = previewDaysWithSessions,
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/** With the [trailing] slot filled, the way all three day-strip screens fill it. */
+@Preview
+@Composable
+private fun WeekStripWithTrailingPreview() {
+    PreviewSurface {
+        WeekStrip(
+            selectedDay = PREVIEW_TODAY,
+            today = PREVIEW_TODAY,
+            visibleDays = previewWeek,
+            markedDays = previewDaysWithSessions,
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            modifier = Modifier.padding(16.dp),
+            trailing = { Button(onClick = {}) { Text("New log") } },
+        )
+    }
+}
+
+/**
+ * The squeeze this row has to survive: the longest button label in the app, a narrow
+ * screen and a large font scale, all at once.
+ *
+ * **What to look for is that the button is still there.** An unweighted date would be
+ * measured against the full width first and leave the button nothing, and a `Row` does
+ * not clip a child it cannot fit — it measures it to zero and the control leaves the
+ * tree entirely. The date wrapping to two lines here is the trade working.
+ */
+@Preview(name = "Narrow", widthDp = 320)
+@Preview(name = "Narrow + 200% font", widthDp = 320, fontScale = 2f)
+@Composable
+private fun WeekStripSqueezedPreview() {
+    PreviewSurface {
+        WeekStrip(
+            selectedDay = PREVIEW_TODAY,
+            today = PREVIEW_TODAY,
+            visibleDays = previewWeek,
+            markedDays = previewDaysWithSessions,
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            modifier = Modifier.padding(16.dp),
+            trailing = { Button(onClick = {}) { Text("Nouvelle séance") } },
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun WeekArrowPreview() {
+    PreviewSurface {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            WeekArrow(glyph = "‹", onClick = {})
+            WeekArrow(glyph = "›", onClick = {})
+        }
+    }
+}
+
+/**
+ * All four cell states at once, which is the only way to check they stay distinct:
+ * selected, today-but-not-selected, marked, and plain. Selected-and-today is the
+ * fifth — the border drops away there, deliberately, because the fill already says it.
+ */
+@PreviewLightDark
+@Composable
+private fun DayCellPreview() {
+    PreviewSurface {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            DayCell(
+                day = PREVIEW_WEEK_START,
+                isSelected = true,
+                isToday = false,
+                isMarked = true,
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+            DayCell(
+                day = PREVIEW_WEEK_START + 1,
+                isSelected = false,
+                isToday = true,
+                isMarked = false,
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+            DayCell(
+                day = PREVIEW_WEEK_START + 2,
+                isSelected = false,
+                isToday = false,
+                isMarked = true,
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+            DayCell(
+                day = PREVIEW_WEEK_START + 3,
+                isSelected = false,
+                isToday = false,
+                isMarked = false,
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+            DayCell(
+                day = PREVIEW_TODAY,
+                isSelected = true,
+                isToday = true,
+                isMarked = true,
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Preview(heightDp = 640)
+@Composable
+private fun DayPickerDialogPreview() {
+    PreviewSurface {
+        DayPickerDialog(initialDay = PREVIEW_TODAY, onDismiss = {}, onPick = {})
+    }
+}
+
+/**
+ * The date formatters, and specifically [weekLabelOf]'s three branches — the month is
+ * repeated only when the week straddles two and the year only when it straddles two of
+ * those, so the three have to be read together to see that the short case stays short.
+ *
+ * They are `@Composable` because every part of them is translated: switching this
+ * preview's locale is the fastest check that a translation still reads as a date.
+ */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun DateLabelsPreview() {
+    // Monday-start weeks: within August, across August into September, across the year.
+    val sameMonth = PREVIEW_WEEK_START
+    val crossMonth = 20_696L
+    val crossYear = 20_815L
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(PREVIEW_TODAY.asFullDate(), style = MaterialTheme.typography.titleSmall)
+            // A Row rather than a joined string: asWeekdayLabel is @Composable, so it
+            // cannot be called from inside joinToString's plain lambda.
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                previewWeek.forEach { day ->
+                    Text(
+                        day.asWeekdayLabel() + " " + day.asDayOfMonth(),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text(weekLabelOf(sameMonth), style = MaterialTheme.typography.bodyMedium)
+            Text(weekLabelOf(crossMonth), style = MaterialTheme.typography.bodyMedium)
+            Text(weekLabelOf(crossYear), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }

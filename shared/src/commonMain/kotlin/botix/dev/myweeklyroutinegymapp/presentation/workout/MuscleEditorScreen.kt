@@ -15,9 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_name
 import myweeklyroutinegymapp.shared.generated.resources.common_save
@@ -108,5 +111,95 @@ fun MuscleEditorContent(
         ) {
             Text(stringResource(Res.string.common_save))
         }
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The four cases one field stands in for.
+ *
+ * They are worth previewing separately because the *screen* is nearly identical in all
+ * four and the difference is carried by the app bar, which is not in this composable.
+ * The one thing that does change here is the group heading: a leaf shows where it will
+ * land, a group has nowhere to land, and an empty group name shows nothing rather than
+ * an empty line.
+ */
+@PreviewLightDark
+@Composable
+private fun MuscleEditorContentNewLeafPreview() {
+    PreviewSurface {
+        MuscleEditorContent(
+            state = MuscleEditorUiState(groupName = "Chest", isGroup = false, isLoading = false),
+            onNameChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(name = "Rename a leaf")
+@Composable
+private fun MuscleEditorContentRenameLeafPreview() {
+    PreviewSurface {
+        MuscleEditorContent(
+            state = MuscleEditorUiState(
+                name = "Upper chest",
+                groupName = "Chest",
+                isGroup = false,
+                isLoading = false,
+            ),
+            onNameChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(name = "New group")
+@Composable
+private fun MuscleEditorContentNewGroupPreview() {
+    PreviewSurface {
+        MuscleEditorContent(
+            state = MuscleEditorUiState(isGroup = true, isLoading = false),
+            onNameChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(name = "Rename a group")
+@Composable
+private fun MuscleEditorContentRenameGroupPreview() {
+    PreviewSurface {
+        MuscleEditorContent(
+            state = MuscleEditorUiState(name = "Back", isGroup = true, isLoading = false),
+            onNameChange = {},
+            onSave = {},
+        )
+    }
+}
+
+/** Blank is the only refusal here — there is no uniqueness rule on a muscle name. */
+@Preview(name = "Name blank")
+@Composable
+private fun MuscleEditorContentBlankPreview() {
+    PreviewSurface {
+        MuscleEditorContent(
+            state = MuscleEditorUiState(
+                name = "",
+                groupName = "Legs",
+                isLoading = false,
+                isNameBlank = true,
+            ),
+            onNameChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(heightDp = 200)
+@Composable
+private fun MuscleEditorContentLoadingPreview() {
+    PreviewSurface {
+        MuscleEditorContent(state = MuscleEditorUiState(), onNameChange = {}, onSave = {})
     }
 }

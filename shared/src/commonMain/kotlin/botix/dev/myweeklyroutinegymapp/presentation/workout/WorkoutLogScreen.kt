@@ -26,17 +26,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.domain.model.Activity
+import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.SessionSummary
 import botix.dev.myweeklyroutinegymapp.presentation.common.EmptyState
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
 import botix.dev.myweeklyroutinegymapp.presentation.common.MessageSnackbar
-import botix.dev.myweeklyroutinegymapp.presentation.common.ScreenActions
+import botix.dev.myweeklyroutinegymapp.presentation.common.SectionHeader
 import botix.dev.myweeklyroutinegymapp.presentation.common.SwipeToDelete
 import botix.dev.myweeklyroutinegymapp.presentation.common.WeekStrip
 import botix.dev.myweeklyroutinegymapp.presentation.common.formatMeasure
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PREVIEW_TODAY
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewActivities
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDayLog
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewDaysWithSessions
 import botix.dev.myweeklyroutinegymapp.presentation.theme.GymIcons
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.common_cancel
@@ -111,17 +119,6 @@ fun WorkoutLogContent(
         modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenActions {
-            // Creating a log is an explicit act rather than a side effect of picking
-            // from a list that filled the screen. The strip decides *when*; this
-            // decides *whether*.
-            //
-            // The Muscles button that used to sit beside it is in Settings now: it
-            // opened a catalogue, which is configuration, and it was the one control
-            // in this header that had nothing to do with the day on screen.
-            Button(onClick = { showNewLogDialog = true }) { Text(stringResource(Res.string.log_new)) }
-        }
-
         WeekStrip(
             selectedDay = state.selectedDay,
             today = state.today,
@@ -130,7 +127,25 @@ fun WorkoutLogContent(
             onSelectDay = onSelectDay,
             onStepWeek = onStepWeek,
             onGoToToday = onGoToToday,
-        )
+        ) {
+            // On the strip's own date row, opposite the date and centred against it —
+            // the same slot and the same alignment the body-weight screen uses, so the
+            // one button that creates something sits in the same place on every tab
+            // that has a day strip.
+            //
+            // It belongs beside the date rather than above it because the date is its
+            // subject: this creates a log *for the selected day*, and the day it will
+            // land on is then the thing directly next to the button that lands it.
+            //
+            // Creating a log is still an explicit act rather than a side effect of
+            // picking from a list that filled the screen. The strip decides *when*;
+            // this decides *whether*.
+            //
+            // The Muscles button that used to sit beside it is in Preferences now: it
+            // opened a catalogue, which is configuration, and it was the one control
+            // in this header that had nothing to do with the day on screen.
+            Button(onClick = { showNewLogDialog = true }) { Text(stringResource(Res.string.log_new)) }
+        }
 
         MessageSnackbar(state.message?.let { messageText(it) }, onConsumeMessage)
 
@@ -401,4 +416,199 @@ private fun Double.asMinutesSeconds(): String {
 @Composable
 private fun messageText(message: WorkoutMessage): String = when (message) {
     WorkoutMessage.Deleted -> stringResource(Res.string.common_deleted)
+}
+
+// --- Previews ---------------------------------------------------------------
+
+private val previewLogState = WorkoutLogUiState(
+    strengthActivities = previewActivities.filter {
+        it.measurementType == MeasurementType.STRENGTH && !it.isArchived
+    },
+    distanceActivities = previewActivities.filter {
+        it.measurementType == MeasurementType.DISTANCE_TIME
+    },
+    selectedDay = PREVIEW_TODAY,
+    today = PREVIEW_TODAY,
+    daysWithSessions = previewDaysWithSessions,
+    dayLog = previewDayLog,
+    isLoading = false,
+)
+
+/**
+ * A day holding all three shapes of session at once: a strength log with volume, a ride
+ * with a distance and a pace, and one that was started and never filled in.
+ *
+ * The third is the one to look at. It says so in words rather than showing "0 sets",
+ * because a zero on this line reads like a result somebody logged.
+ */
+@PreviewLightDark
+@Composable
+private fun WorkoutLogContentPreview() {
+    PreviewSurface {
+        WorkoutLogContent(
+            state = previewLogState,
+            onOpenEntry = { _, _, _ -> },
+            onSelectDay = {},
+            onDeleteLog = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/** Today with nothing on it. The hint points at the New-log button in the header. */
+@Preview(name = "Nothing logged today")
+@Composable
+private fun WorkoutLogContentEmptyTodayPreview() {
+    PreviewSurface {
+        WorkoutLogContent(
+            state = previewLogState.copy(dayLog = emptyList()),
+            onOpenEntry = { _, _, _ -> },
+            onSelectDay = {},
+            onDeleteLog = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * A fresh install: no activities at all, so the hint sends the user to the Activities
+ * tab instead of to a button that would open an empty picker.
+ */
+@Preview(name = "No activities yet")
+@Composable
+private fun WorkoutLogContentNoActivitiesPreview() {
+    PreviewSurface {
+        WorkoutLogContent(
+            state = WorkoutLogUiState(
+                selectedDay = PREVIEW_TODAY,
+                today = PREVIEW_TODAY,
+                isLoading = false,
+            ),
+            onOpenEntry = { _, _, _ -> },
+            onSelectDay = {},
+            onDeleteLog = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * Loading swaps the *content*, never the header — returning early would take the
+ * New-log button with it, and this preview is what proves the button is still there.
+ */
+@Preview(name = "Loading")
+@Composable
+private fun WorkoutLogContentLoadingPreview() {
+    PreviewSurface {
+        WorkoutLogContent(
+            state = WorkoutLogUiState(selectedDay = PREVIEW_TODAY, today = PREVIEW_TODAY),
+            onOpenEntry = { _, _, _ -> },
+            onSelectDay = {},
+            onDeleteLog = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            onConsumeMessage = {},
+        )
+    }
+}
+
+/**
+ * The day's list on its own.
+ *
+ * The delete confirmation lives behind a swipe and local state, so a static render
+ * cannot show it — run the preview and drag a row left.
+ */
+@PreviewLightDark
+@Composable
+private fun DayLogPreview() {
+    PreviewSurface {
+        DayLog(
+            state = previewLogState,
+            onOpenEntry = { _, _, _ -> },
+            onDeleteLog = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/** A browsed day with nothing on it phrases the empty state differently from today. */
+@Preview(name = "Empty, not today")
+@Composable
+private fun DayLogEmptyPreview() {
+    PreviewSurface {
+        DayLog(
+            state = previewLogState.copy(dayLog = emptyList(), selectedDay = PREVIEW_TODAY - 3),
+            onOpenEntry = { _, _, _ -> },
+            onDeleteLog = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * Both measurement types in one list.
+ *
+ * That is the whole point of the dialog: it was filtered to strength once, and an
+ * activity created as distance-and-time could then never be logged at all — it simply
+ * never appeared here, and there was no other way in.
+ */
+@PreviewLightDark
+@Composable
+private fun NewLogDialogPreview() {
+    PreviewSurface {
+        NewLogDialog(
+            activities = previewActivities.filter { !it.isArchived },
+            onDismiss = {},
+            onPick = {},
+        )
+    }
+}
+
+@Preview(name = "Nothing to log")
+@Composable
+private fun NewLogDialogEmptyPreview() {
+    PreviewSurface {
+        NewLogDialog(activities = emptyList(), onDismiss = {}, onPick = {})
+    }
+}
+
+/**
+ * The distance line and the pace formatter.
+ *
+ * A pace is read as "5:14", never as 314 seconds, and the guards matter: a ride saved
+ * with only one of the two measures, or with a zero distance, has no pace at all rather
+ * than an "Infinity /km".
+ */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun DistanceLinesPreview() {
+    val samples = listOf(
+        previewDayLog[1],
+        previewDayLog[1].copy(durationSeconds = null),
+        previewDayLog[1].copy(distanceMeters = 0),
+        previewDayLog[1].copy(distanceMeters = 21_097, durationSeconds = 6_614),
+    )
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionHeader(text = "distanceTimeLine")
+            samples.forEach { summary ->
+                Text(text = summary.distanceTimeLine(), style = MaterialTheme.typography.bodySmall)
+            }
+            SectionHeader(text = "WorkoutMessage")
+            Text(
+                text = messageText(WorkoutMessage.Deleted),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }

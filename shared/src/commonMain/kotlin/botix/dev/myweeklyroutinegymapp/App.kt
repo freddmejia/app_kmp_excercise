@@ -323,9 +323,18 @@ private val ScreenStackSaver: Saver<List<Screen>, Any> = listSaver(
  * *before* this composes — `GymApplication` does it on Android, `startKoinIos()`
  * called from `iOSApp.swift` does it on iOS.
  *
- * Not previewable: the screens resolve real dependencies. Preview their `…Content`
- * composables instead, which take their state as a parameter — wrapped in [GymTheme],
- * which is what gives them the app's colours outside of a running app.
+ * **This is the one composable in the app with no `@Preview`, and it cannot have one.**
+ * Every branch of the `when` below resolves a ViewModel from Koin, and every one of
+ * those reaches a repository and a SQLDelight driver — a preview of this would need a
+ * database, not a fixture. Faking the graph well enough to render it would be building
+ * a second app to look at.
+ *
+ * What *is* previewable is everything it composes: each screen's stateless `…Content`
+ * half, which takes its state as a parameter. Those previews live at the bottom of each
+ * screen's own file and share the fixtures and the theme-and-ambients wrapper in
+ * `presentation/preview/PreviewFixtures.kt`. Between them they cover every screen in
+ * this `when`; what they cannot cover is the chrome around it — the app bar's title and
+ * back arrow, and the tab row — which are only ever real on a device.
  */
 // TopAppBar is still experimental in the Kotlin/Native side of material3, the same
 // way DatePicker is (see WeekStrip) — the Android artifact stabilised it first.

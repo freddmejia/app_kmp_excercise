@@ -24,11 +24,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.domain.model.MeasurementType
 import botix.dev.myweeklyroutinegymapp.domain.model.MuscleSection
+import botix.dev.myweeklyroutinegymapp.presentation.common.FormActionBar
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewCategories
+import botix.dev.myweeklyroutinegymapp.presentation.preview.previewMuscleSections
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.activity_category_label
 import myweeklyroutinegymapp.shared.generated.resources.activity_measure_question
@@ -109,112 +115,119 @@ fun ActivityEditorContent(
         return
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = onNameChange,
-            label = { Text(stringResource(Res.string.common_name)) },
-            singleLine = true,
-            isError = state.error != null,
-            // Under the field rather than in a snackbar over the list: every one of
-            // these is a reason this form was not accepted, and it has to stay
-            // readable while what caused it is corrected.
-            supportingText = state.error?.let { error -> { ErrorText(error) } },
-            modifier = Modifier.fillMaxWidth(),
-        )
+    // The form scrolls; Save does not. This is the longest form in the app — four
+    // fields and the whole muscle catalogue under them — so the button was reliably
+    // off-screen exactly when the form was worth committing.
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = onNameChange,
+                label = { Text(stringResource(Res.string.common_name)) },
+                singleLine = true,
+                isError = state.error != null,
+                // Under the field rather than in a snackbar over the list: every one of
+                // these is a reason this form was not accepted, and it has to stay
+                // readable while what caused it is corrected.
+                supportingText = state.error?.let { error -> { ErrorText(error) } },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        OutlinedTextField(
-            value = state.icon,
-            onValueChange = onIconChange,
-            label = { Text(stringResource(Res.string.common_icon_optional)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+            OutlinedTextField(
+                value = state.icon,
+                onValueChange = onIconChange,
+                label = { Text(stringResource(Res.string.common_icon_optional)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        // Hidden until a category exists: a row offering only "None" is noise, and it
-        // is the state every user starts in.
-        if (state.categories.isNotEmpty()) {
-            // Each labelled block is its own column. The 16.dp between sections is
-            // what separates them, and a label sitting that far from the control it
-            // names reads as a heading for everything below rather than for one row.
+            // Hidden until a category exists: a row offering only "None" is noise, and it
+            // is the state every user starts in.
+            if (state.categories.isNotEmpty()) {
+                // Each labelled block is its own column. The 16.dp between sections is
+                // what separates them, and a label sitting that far from the control it
+                // names reads as a heading for everything below rather than for one row.
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(Res.string.activity_category_label),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = state.categoryId == null,
+                                onClick = { onCategoryChange(null) },
+                                label = { Text(stringResource(Res.string.common_none)) },
+                            )
+                        }
+                        items(state.categories, key = { it.id }) { category ->
+                            FilterChip(
+                                selected = state.categoryId == category.id,
+                                onClick = { onCategoryChange(category.id) },
+                                label = {
+                                    Text(
+                                        listOfNotNull(category.icon, category.name)
+                                            .joinToString(" "),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    stringResource(Res.string.activity_category_label),
+                    stringResource(Res.string.activity_measure_question),
                     style = MaterialTheme.typography.labelLarge,
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item {
-                        FilterChip(
-                            selected = state.categoryId == null,
-                            onClick = { onCategoryChange(null) },
-                            label = { Text(stringResource(Res.string.common_none)) },
-                        )
-                    }
-                    items(state.categories, key = { it.id }) { category ->
-                        FilterChip(
-                            selected = state.categoryId == category.id,
-                            onClick = { onCategoryChange(category.id) },
-                            label = {
-                                Text(
-                                    listOfNotNull(category.icon, category.name)
-                                        .joinToString(" "),
-                                )
-                            },
-                        )
-                    }
+                // Offered on an existing activity too, but the domain has the last word:
+                // the type is fixed once sessions exist under it, and the refusal comes
+                // back as the error above rather than as a control that is quietly inert.
+                //
+                // Unlike the categories above, this list is fixed — each value is a
+                // logging form and a set of metrics that exist in code, not user data.
+                MeasurementType.entries.forEach { option ->
+                    FilterChip(
+                        selected = option == state.type,
+                        onClick = { onTypeChange(option) },
+                        label = { Text(stringResource(option.labelRes())) },
+                    )
+                }
+            }
+
+            if (state.showsMuscles) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(Res.string.activity_muscles_optional),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        stringResource(Res.string.activity_muscles_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    MuscleChecklist(
+                        sections = state.muscleSections,
+                        selected = state.muscleIds,
+                        onToggle = onToggleMuscle,
+                        onToggleGroup = onToggleGroup,
+                    )
                 }
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                stringResource(Res.string.activity_measure_question),
-                style = MaterialTheme.typography.labelLarge,
-            )
-            // Offered on an existing activity too, but the domain has the last word:
-            // the type is fixed once sessions exist under it, and the refusal comes
-            // back as the error above rather than as a control that is quietly inert.
-            //
-            // Unlike the categories above, this list is fixed — each value is a
-            // logging form and a set of metrics that exist in code, not user data.
-            MeasurementType.entries.forEach { option ->
-                FilterChip(
-                    selected = option == state.type,
-                    onClick = { onTypeChange(option) },
-                    label = { Text(stringResource(option.labelRes())) },
-                )
+        FormActionBar {
+            Button(
+                onClick = onSave,
+                enabled = state.canSave,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(Res.string.common_save))
             }
-        }
-
-        if (state.showsMuscles) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    stringResource(Res.string.activity_muscles_optional),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Text(
-                    stringResource(Res.string.activity_muscles_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                MuscleChecklist(
-                    sections = state.muscleSections,
-                    selected = state.muscleIds,
-                    onToggle = onToggleMuscle,
-                    onToggleGroup = onToggleGroup,
-                )
-            }
-        }
-
-        Button(
-            onClick = onSave,
-            enabled = state.canSave,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(Res.string.common_save))
         }
     }
 }
@@ -307,4 +320,182 @@ internal fun MeasurementType.labelRes(): StringResource = when (this) {
     MeasurementType.STRENGTH -> Res.string.measure_strength
     MeasurementType.DISTANCE_TIME -> Res.string.measure_distance
     MeasurementType.SIMPLE -> Res.string.measure_simple
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * A strength activity being edited: every section of the form is on screen at once,
+ * which is the thing the three dialogs this replaced could never show.
+ */
+@PreviewLightDark
+@Composable
+private fun ActivityEditorContentPreview() {
+    PreviewSurface {
+        ActivityEditorContent(
+            state = ActivityEditorUiState(
+                name = "Push day",
+                icon = "🏋",
+                type = MeasurementType.STRENGTH,
+                categoryId = 1,
+                muscleIds = setOf(1L, 2L, 7L),
+                categories = previewCategories,
+                muscleSections = previewMuscleSections,
+                isLoading = false,
+            ),
+            onNameChange = {},
+            onIconChange = {},
+            onTypeChange = {},
+            onCategoryChange = {},
+            onToggleMuscle = {},
+            onToggleGroup = { _, _ -> },
+            onSave = {},
+        )
+    }
+}
+
+/**
+ * A new activity in a fresh install: no categories yet, so the category row is not
+ * drawn at all — a row offering only "None" is noise, and it is the state everyone
+ * starts in.
+ */
+@Preview(name = "New — empty catalogue", heightDp = 560)
+@Composable
+private fun ActivityEditorContentNewPreview() {
+    PreviewSurface {
+        ActivityEditorContent(
+            state = ActivityEditorUiState(isLoading = false),
+            onNameChange = {},
+            onIconChange = {},
+            onTypeChange = {},
+            onCategoryChange = {},
+            onToggleMuscle = {},
+            onToggleGroup = { _, _ -> },
+            onSave = {},
+        )
+    }
+}
+
+/**
+ * A distance activity. The muscle section disappears — the ticks are kept in state so
+ * that flipping back and forth does not silently undo a selection, but nothing about
+ * them is written or shown while the type does not use them.
+ */
+@Preview(name = "Distance and time", heightDp = 560)
+@Composable
+private fun ActivityEditorContentDistancePreview() {
+    PreviewSurface {
+        ActivityEditorContent(
+            state = ActivityEditorUiState(
+                name = "Morning run",
+                type = MeasurementType.DISTANCE_TIME,
+                categoryId = 2,
+                muscleIds = setOf(1L),
+                categories = previewCategories,
+                muscleSections = previewMuscleSections,
+                isLoading = false,
+            ),
+            onNameChange = {},
+            onIconChange = {},
+            onTypeChange = {},
+            onCategoryChange = {},
+            onToggleMuscle = {},
+            onToggleGroup = { _, _ -> },
+            onSave = {},
+        )
+    }
+}
+
+/**
+ * The refusal that costs the most to get wrong: the type is attempted first on save,
+ * so `TypeLocked` means nothing at all was written — the rename did not go through
+ * either. The message has to be read as "this form was rejected", not "most of it
+ * worked".
+ */
+@Preview(name = "Type locked by history", heightDp = 560)
+@Composable
+private fun ActivityEditorContentTypeLockedPreview() {
+    PreviewSurface {
+        ActivityEditorContent(
+            state = ActivityEditorUiState(
+                name = "Push day",
+                type = MeasurementType.DISTANCE_TIME,
+                categoryId = 1,
+                categories = previewCategories,
+                muscleSections = previewMuscleSections,
+                isLoading = false,
+                error = ActivityEditorError.TypeLocked(sessionCount = 24),
+            ),
+            onNameChange = {},
+            onIconChange = {},
+            onTypeChange = {},
+            onCategoryChange = {},
+            onToggleMuscle = {},
+            onToggleGroup = { _, _ -> },
+            onSave = {},
+        )
+    }
+}
+
+@Preview(name = "Loading", heightDp = 200)
+@Composable
+private fun ActivityEditorContentLoadingPreview() {
+    PreviewSurface {
+        ActivityEditorContent(
+            state = ActivityEditorUiState(),
+            onNameChange = {},
+            onIconChange = {},
+            onTypeChange = {},
+            onCategoryChange = {},
+            onToggleMuscle = {},
+            onToggleGroup = { _, _ -> },
+            onSave = {},
+        )
+    }
+}
+
+/** All three refusals, stacked, so their wording can be compared at a glance. */
+@Preview(name = "en")
+@Preview(name = "es", locale = "es")
+@Composable
+private fun ErrorTextPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            ErrorText(ActivityEditorError.NameBlank)
+            ErrorText(ActivityEditorError.NameTaken)
+            ErrorText(ActivityEditorError.TypeLocked(sessionCount = 1))
+            ErrorText(ActivityEditorError.TypeLocked(sessionCount = 24))
+        }
+    }
+}
+
+/**
+ * The checklist on its own, in the three states that matter: nothing ticked, a group
+ * fully ticked (its shortcut flips to "None"), and no catalogue at all.
+ */
+@PreviewLightDark
+@Composable
+private fun MuscleChecklistPreview() {
+    PreviewSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MuscleChecklist(
+                sections = previewMuscleSections.take(2),
+                selected = previewMuscleSections.first().muscles.map { it.muscleId }.toSet(),
+                onToggle = {},
+                onToggleGroup = { _, _ -> },
+            )
+            MuscleChecklist(
+                sections = emptyList(),
+                selected = emptySet(),
+                onToggle = {},
+                onToggleGroup = { _, _ -> },
+            )
+        }
+    }
 }

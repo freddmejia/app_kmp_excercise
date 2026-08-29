@@ -14,9 +14,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import botix.dev.myweeklyroutinegymapp.presentation.common.LoadingState
+import botix.dev.myweeklyroutinegymapp.presentation.preview.PreviewSurface
 import myweeklyroutinegymapp.shared.generated.resources.Res
 import myweeklyroutinegymapp.shared.generated.resources.category_msg_name_blank
 import myweeklyroutinegymapp.shared.generated.resources.category_msg_name_taken
@@ -116,5 +119,89 @@ fun CategoryEditorContent(
         ) {
             Text(stringResource(Res.string.common_save))
         }
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The two things the app bar cannot tell apart from inside this screen: an empty form
+ * (Save disabled, because a blank name is not a category) and one opened onto a
+ * category that already exists.
+ */
+@PreviewLightDark
+@Composable
+private fun CategoryEditorContentPreview() {
+    PreviewSurface {
+        CategoryEditorContent(
+            state = CategoryEditorUiState(name = "Mobility", icon = "🧘", isLoading = false),
+            onNameChange = {},
+            onIconChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(name = "New — nothing typed yet")
+@Composable
+private fun CategoryEditorContentNewPreview() {
+    PreviewSurface {
+        CategoryEditorContent(
+            state = CategoryEditorUiState(isLoading = false),
+            onNameChange = {},
+            onIconChange = {},
+            onSave = {},
+        )
+    }
+}
+
+/**
+ * The refusals, which are the reason this stopped being a dialog: the message sits
+ * under the field that caused it and stays there while the value is corrected.
+ */
+@Preview(name = "Name blank")
+@Composable
+private fun CategoryEditorContentNameBlankPreview() {
+    PreviewSurface {
+        CategoryEditorContent(
+            state = CategoryEditorUiState(
+                name = "   ",
+                isLoading = false,
+                error = CategoryEditorError.NameBlank,
+            ),
+            onNameChange = {},
+            onIconChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(name = "Name taken")
+@Composable
+private fun CategoryEditorContentNameTakenPreview() {
+    PreviewSurface {
+        CategoryEditorContent(
+            state = CategoryEditorUiState(
+                name = "Cardio",
+                isLoading = false,
+                error = CategoryEditorError.NameTaken,
+            ),
+            onNameChange = {},
+            onIconChange = {},
+            onSave = {},
+        )
+    }
+}
+
+@Preview(heightDp = 200)
+@Composable
+private fun CategoryEditorContentLoadingPreview() {
+    PreviewSurface {
+        CategoryEditorContent(
+            state = CategoryEditorUiState(),
+            onNameChange = {},
+            onIconChange = {},
+            onSave = {},
+        )
     }
 }

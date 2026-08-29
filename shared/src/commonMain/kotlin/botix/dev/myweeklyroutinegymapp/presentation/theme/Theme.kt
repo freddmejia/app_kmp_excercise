@@ -1,15 +1,28 @@
 package botix.dev.myweeklyroutinegymapp.presentation.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.dp
 
 /**
  * The app's colour system: one electric-blue accent on a cool neutral base.
@@ -240,5 +253,99 @@ fun GymTheme(
             colorScheme = if (darkTheme) GymDarkColors else GymLightColors,
             content = content,
         )
+    }
+}
+
+// --- Previews ---------------------------------------------------------------
+
+/**
+ * The whole palette, both schemes, on one sheet.
+ *
+ * This is the preview the rest of the app's previews are checked against. Every colour
+ * in this file is private, and screens name only roles — so the only way to see whether
+ * a role still carries the meaning a screen is relying on ("selected", "raised",
+ * "destructive") is to render the roles themselves, side by side, in both schemes.
+ *
+ * Each swatch is painted in its role and labelled in that role's *on* colour, so an
+ * unreadable label is the contrast failure rather than a description of one. The
+ * elevation ladder is grouped in order: those five have to be five distinguishable
+ * steps, and in the dark scheme on a near-black base that is not a given.
+ */
+@PreviewLightDark
+@Composable
+private fun GymThemePreview() {
+    GymTheme {
+        val scheme = MaterialTheme.colorScheme
+        val accents = LocalGymAccents.current
+        Surface(color = scheme.background) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SwatchGroup(
+                    title = "Accent",
+                    swatches = listOf(
+                        Triple("primary", scheme.primary, scheme.onPrimary),
+                        Triple("primaryContainer", scheme.primaryContainer, scheme.onPrimaryContainer),
+                        Triple("secondary", scheme.secondary, scheme.onSecondary),
+                        Triple("tertiary", scheme.tertiary, scheme.onTertiary),
+                    ),
+                )
+                SwatchGroup(
+                    title = "Surfaces",
+                    swatches = listOf(
+                        Triple("background", scheme.background, scheme.onBackground),
+                        Triple("surface", scheme.surface, scheme.onSurface),
+                        Triple("surfaceVariant", scheme.surfaceVariant, scheme.onSurfaceVariant),
+                    ),
+                )
+                SwatchGroup(
+                    title = "Elevation ladder",
+                    swatches = listOf(
+                        Triple("lowest", scheme.surfaceContainerLowest, scheme.onSurface),
+                        Triple("low", scheme.surfaceContainerLow, scheme.onSurface),
+                        Triple("container", scheme.surfaceContainer, scheme.onSurface),
+                        Triple("high", scheme.surfaceContainerHigh, scheme.onSurface),
+                        Triple("highest", scheme.surfaceContainerHighest, scheme.onSurface),
+                    ),
+                )
+                SwatchGroup(
+                    title = "Error and the accents M3 has no role for",
+                    swatches = listOf(
+                        Triple("error", scheme.error, scheme.onError),
+                        Triple("errorContainer", scheme.errorContainer, scheme.onErrorContainer),
+                        Triple("destructive", accents.destructive, accents.onDestructive),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwatchGroup(title: String, swatches: List<Triple<String, Color, Color>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = title, style = MaterialTheme.typography.labelLarge)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            swatches.forEach { (name, color, onColor) ->
+                Surface(
+                    color = color,
+                    contentColor = onColor,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.size(width = 104.dp, height = 44.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = name, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
     }
 }
