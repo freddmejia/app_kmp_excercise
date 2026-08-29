@@ -31,8 +31,10 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import botix.dev.myweeklyroutinegymapp.domain.usecase.workout.SyncCatalogSeedsUseCase
 import botix.dev.myweeklyroutinegymapp.presentation.activity.ActivityCategoryScreen
 import botix.dev.myweeklyroutinegymapp.presentation.activity.CategoryEditorScreen
@@ -354,7 +356,11 @@ private fun SyncCatalogSeeds() {
 
 // TopAppBar is still experimental in the Kotlin/Native side of material3, the same
 // way DatePicker is (see WeekStrip) — the Android artifact stabilised it first.
-@OptIn(ExperimentalMaterial3Api::class)
+// BackHandler is experimental in Compose Multiplatform 1.11 for the same reason it
+// exists at all: the multiplatform contract around a "back" that iOS expresses as an
+// edge swipe and Android as a gesture or a button is still settling. What it compiles
+// to on Android is the OnBackPressedDispatcher, which is not experimental.
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun App() {
     GymTheme {
@@ -384,6 +390,23 @@ fun App() {
         fun pop() {
             backStack = backStack.dropLast(1).ifEmpty { listOf(Screen.WorkoutLog) }
         }
+
+        // The system back gesture pops this stack.
+        //
+        // It did not, and that was the oldest open item in the logs: swiping back from
+        // an editor closed the *app*, because Android's back went to the activity while
+        // the stack that actually decided what was on screen lived here and never heard
+        // about it. Every screen therefore had exactly one way out — the arrow in the
+        // app bar — and the gesture people reach for first threw away what they were
+        // doing.
+        //
+        // Enabled only on a pushed route, so back at a tab root still leaves the app.
+        // That is the platform's behaviour and worth keeping: intercepting it there
+        // would make the app impossible to leave by the ordinary means.
+        //
+        // It is the same `pop()` the arrow calls, deliberately. Two ways out that ran
+        // different code would drift, and the arrow is the one with test coverage.
+        BackHandler(enabled = backStack.size > 1) { pop() }
 
         Scaffold(
             // The app fills the window, insets and all, and the two bars pay for the
@@ -450,10 +473,12 @@ fun App() {
                 // schemes without naming a colour here.
                 NavigationBar {
                     Destination.entries.forEach { destination ->
+                        // Derived, not stored. The bar has no idea of its own about
+                        // which tab is current; it asks the back stack. Hoisted to a
+                        // local because the label reads it too.
+                        val selected = destination == currentScreen.destination
                         NavigationBarItem(
-                            // Derived, not stored. The bar has no idea of its own
-                            // about which tab is current; it asks the back stack.
-                            selected = destination == currentScreen.destination,
+                            selected = selected,
                             onClick = { select(destination) },
                             icon = {
                                 Icon(
@@ -464,7 +489,23 @@ fun App() {
                                     contentDescription = null,
                                 )
                             },
-                            label = { Text(stringResource(destination.label)) },
+                            label = {
+                                Text(
+                                    stringResource(destination.label),
+                                    // Weight as well as colour. The bar already tints
+                                    // the selected item and puts a pill behind its
+                                    // icon, but both of those are colour — and colour
+                                    // alone is the one signal that does not survive a
+                                    // greyscale display, a colour-vision difference,
+                                    // or bright sunlight. The weight says the same
+                                    // thing in a second channel.
+                                    fontWeight = if (selected) {
+                                        FontWeight.SemiBold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                                )
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 // The M3 pill, filled with the accent itself rather
                                 // than a tinted container. In the light scheme the

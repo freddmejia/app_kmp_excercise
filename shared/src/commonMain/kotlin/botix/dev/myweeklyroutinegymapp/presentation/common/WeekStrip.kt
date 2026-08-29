@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -222,7 +223,19 @@ fun WeekStrip(
         ) {
             WeekArrow(glyph = "\u2039", onClick = { onStepWeek(false) })
 
-            visibleDays.forEach { day ->
+            // Today and behind, never ahead.
+            //
+            // A training log records what happened. A cell for next Thursday invites a
+            // session on a day that has not occurred, and every frequency, streak and
+            // "untrained this week" figure then counts a workout nobody did. The week
+            // is still the unit — this trims the tail of the current one and leaves a
+            // past week whole, which is why it is a filter here rather than a change
+            // to weekOf().
+            //
+            // The cells that remain keep weight(1f), so a Saturday's six cells are
+            // wider than a past week's seven rather than leaving a gap where Sunday
+            // would have been. The row is a row of days, not a fixed grid.
+            visibleDays.filter { it <= today }.forEach { day ->
                 DayCell(
                     day = day,
                     isSelected = day == selectedDay,
@@ -233,13 +246,21 @@ fun WeekStrip(
                 )
             }
 
-            WeekArrow(glyph = "\u203A", onClick = { onStepWeek(true) })
+            // Disabled on the week holding today: stepping forward from it would land
+            // on a week with nothing left to show, and an arrow that empties the strip
+            // is worse than one that does not move.
+            WeekArrow(
+                glyph = "\u203A",
+                onClick = { onStepWeek(true) },
+                enabled = visibleDays.none { it >= today },
+            )
         }
     }
 
     if (showDatePicker) {
         DayPickerDialog(
             initialDay = selectedDay,
+            today = today,
             onDismiss = { showDatePicker = false },
             onPick = { day ->
                 onSelectDay(day)
@@ -260,9 +281,11 @@ fun WeekStrip(
 private fun WeekArrow(
     glyph: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.size(36.dp),
         shape = CircleShape,
         contentPadding = PaddingValues(0.dp),
@@ -333,6 +356,14 @@ private fun DayCell(
 private const val MILLIS_PER_DAY = 86_400_000L
 
 /**
+ * The year [today] falls in, for the picker's year list.
+ *
+ * Goes through the same `LocalDate` conversion every formatter here uses rather than
+ * dividing by 365 — the approximation is wrong on roughly one day in four.
+ */
+private fun todayYear(today: Long): Int = LocalDate.fromEpochDays(today.toInt()).year
+
+/**
  * Jumping to an arbitrary year, month and day.
  *
  * [rememberDatePickerState] speaks UTC milliseconds at the start of a day, and an
@@ -347,25 +378,51 @@ private const val MILLIS_PER_DAY = 86_400_000L
 @Composable
 private fun DayPickerDialog(
     initialDay: Long,
+    today: Long,
     onDismiss: () -> Unit,
     onPick: (Long) -> Unit,
 ) {
     val pickerState = rememberDatePickerState(
         initialSelectedDateMillis = initialDay * MILLIS_PER_DAY,
+        // The strip stops at today, and this must stop there too — otherwise the
+        // calendar is a way round the rule, landing the user on a day the strip
+        // then refuses to draw.
+        //
+        // Both halves are needed: the day grid greys out future dates, and the year
+        // list stops at this year, because picking 2031 from the year list would
+        // otherwise move the grid somewhere every cell is disabled.
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                utcTimeMillis / MILLIS_PER_DAY <= today
+
+            override fun isSelectableYear(year: Int): Boolean = year <= todayYear(today)
+        },
     )
 
     DatePickerDialog(
         onDismissRequest = onDismiss,
+        // Both buttons go in the confirm slot, as one full-width row.
+        //
+        // Material puts them together at the end, which reads as a pair of equals and
+        // makes the destructive-ish choice (leaving) the neighbour of the one you
+        // usually want. Pushed apart, each end of the row means something: leave on
+        // the left, commit on the right, and the thumb cannot hit one while reaching
+        // for the other. `dismissButton` is left null because filling it would add a
+        // third button after this row.
         confirmButton = {
-            TextButton(
-                onClick = { pickerState.selectedDateMillis?.let { onPick(it / MILLIS_PER_DAY) } },
-                // The picker allows a cleared selection; confirming that would jump
-                // to the epoch rather than doing nothing.
-                enabled = pickerState.selectedDateMillis != null,
-            ) { Text(stringResource(Res.string.common_go)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.common_cancel)) }
+                TextButton(
+                    onClick = { pickerState.selectedDateMillis?.let { onPick(it / MILLIS_PER_DAY) } },
+                    // The picker allows a cleared selection; confirming that would jump
+                    // to the epoch rather than doing nothing.
+                    enabled = pickerState.selectedDateMillis != null,
+                ) { Text(stringResource(Res.string.common_go)) }
+            }
         },
     ) {
         DatePicker(state = pickerState)
@@ -467,8 +524,13 @@ fun weekLabelOf(day: Long): String {
 // --- Previews ---------------------------------------------------------------
 
 /**
- * The strip as the log and activity screens use it: no trailing content, so the date
- * row looks exactly as it did before that slot existed.
+ * The strip as the log and weight screens use it: no trailing content, so the date row
+ * looks exactly as it did before that slot existed.
+ *
+ * [PREVIEW_TODAY] is a Wednesday, so this is also the shape the current week always
+ * takes — three cells, not seven, and the forward arrow disabled. Thursday onward is
+ * not drawn: a training log records what happened, and a cell for Saturday invites a
+ * session on a day that has not occurred.
  */
 @PreviewLightDark
 @Composable
@@ -478,6 +540,31 @@ private fun WeekStripPreview() {
             selectedDay = PREVIEW_TODAY,
             today = PREVIEW_TODAY,
             visibleDays = previewWeek,
+            markedDays = previewDaysWithSessions,
+            onSelectDay = {},
+            onStepWeek = {},
+            onGoToToday = {},
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+/**
+ * A past week, whole.
+ *
+ * The current week is trimmed at today, so seven cells only ever appear once the week
+ * is behind you — and this is the preview that proves the trim is a filter on the tail
+ * rather than a smaller strip. The forward arrow is live here and disabled in
+ * [WeekStripPreview], which is the other half of the same rule.
+ */
+@Preview
+@Composable
+private fun WeekStripPastWeekPreview() {
+    PreviewSurface {
+        WeekStrip(
+            selectedDay = PREVIEW_WEEK_START - 7,
+            today = PREVIEW_TODAY,
+            visibleDays = (PREVIEW_WEEK_START - 7..PREVIEW_WEEK_START - 1).toList(),
             markedDays = previewDaysWithSessions,
             onSelectDay = {},
             onStepWeek = {},
@@ -630,7 +717,7 @@ private fun DayCellPreview() {
 @Composable
 private fun DayPickerDialogPreview() {
     PreviewSurface {
-        DayPickerDialog(initialDay = PREVIEW_TODAY, onDismiss = {}, onPick = {})
+        DayPickerDialog(initialDay = PREVIEW_TODAY, today = PREVIEW_TODAY, onDismiss = {}, onPick = {})
     }
 }
 

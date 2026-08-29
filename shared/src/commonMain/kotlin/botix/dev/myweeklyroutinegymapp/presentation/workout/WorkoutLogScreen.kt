@@ -17,7 +17,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -304,19 +303,6 @@ private fun DayLog(
 
                                 else -> MusclePills(muscles)
                             }
-                        }
-                        // Visible, because the swipe was not.
-                        //
-                        // Deleting was swipe-only, which is a gesture with nothing on
-                        // screen to suggest it exists — a log created by mistake read
-                        // as permanent. The swipe still works for anyone who knows it;
-                        // this is the half that can be found.
-                        IconButton(onClick = { confirmingDelete = summary }) {
-                            Icon(
-                                imageVector = GymIcons.Trash,
-                                contentDescription = stringResource(Res.string.common_delete),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                         Icon(
                             imageVector = GymIcons.ChevronRight,

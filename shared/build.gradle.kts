@@ -56,6 +56,9 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
+            // The system back gesture, so it pops App.kt's stack instead of leaving
+            // the app. A separate artifact from compose-ui, and not transitive.
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodel)
