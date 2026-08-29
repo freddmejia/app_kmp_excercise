@@ -1,0 +1,159 @@
+import kotlin.Boolean;
+
+-- Editable two-level catalogue. Sessions always point at a `muscle` (a leaf),
+-- never at a group directly; each group ships a "General" leaf in the seed so
+-- group-level logging still aggregates uniformly (TRAINING.md §3).
+CREATE TABLE muscle_group (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    is_archived INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    -- Set on rows the app shipped, null on rows the user made. See muscle_seed below.
+    seed_key    TEXT
+);
+
+CREATE TABLE muscle (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id    INTEGER NOT NULL REFERENCES muscle_group(id),
+    name        TEXT NOT NULL,
+    is_archived INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    seed_key    TEXT
+);
+
+CREATE INDEX muscle_group_id_idx ON muscle(group_id);
+
+CREATE UNIQUE INDEX muscle_group_seed_key_unique ON muscle_group(seed_key)
+    WHERE seed_key IS NOT NULL;
+
+CREATE UNIQUE INDEX muscle_seed_key_unique ON muscle(seed_key)
+    WHERE seed_key IS NOT NULL;
+
+-- Every seed key the app has ever inserted, whether or not its row still exists.
+--
+-- This is what makes deleting a shipped muscle stick: the sync inserts a key that is
+-- not in here, so a row the user removed is never put back. It also means a *new*
+-- seed key in a later version is picked up on the next launch without a migration —
+-- the ledger, not the schema version, is what says "already done".
+CREATE TABLE muscle_seed (
+    seed_key   TEXT NOT NULL PRIMARY KEY,
+    applied_at INTEGER NOT NULL
+);
+
+-- ---------- groups ----------
+
+selectAllGroups:
+SELECT * FROM muscle_group ORDER BY name ASC;
+
+selectActiveGroups:
+SELECT * FROM muscle_group WHERE is_archived = 0 ORDER BY name ASC;
+
+insertGroup:
+INSERT INTO muscle_group (name, is_archived, created_at) VALUES (?, 0, ?);
+
+-- Clears seed_key on the way past: a shipped row the user has renamed becomes their
+-- row, and the language sync must never overwrite the name they chose.
+renameGroup:
+UPDATE muscle_group SET name = ?, seed_key = NULL WHERE id = ?;
+
+setGroupArchived:
+UPDATE muscle_group SET is_archived = ? WHERE id = ?;
+
+-- Only legal when no leaf of this group has history; check countSessionsForGroup.
+--
+-- Its leaves must go first: muscle.group_id has no ON DELETE clause, so with
+-- foreign_keys=ON (the driver sets it) SQLite refuses to delete a group anything
+-- still points at. Every shipped group has leaves, so this is the ordinary path
+-- rather than a corner of it.
+deleteGroup:
+DELETE FROM muscle_group WHERE id = ?;
+
+deleteMusclesInGroup:
+DELETE FROM muscle WHERE group_id = ?;
+
+-- ---------- muscles (leaves) ----------
+
+selectAllMuscles:
+SELECT * FROM muscle ORDER BY name ASC;
+
+selectActiveMuscles:
+SELECT * FROM muscle WHERE is_archived = 0 ORDER BY name ASC;
+
+selectMusclesByGroup:
+SELECT * FROM muscle WHERE group_id = ? AND is_archived = 0 ORDER BY name ASC;
+
+selectMuscleById:
+SELECT * FROM muscle WHERE id = ?;
+
+-- The log picker: active leaves with their group, ordered by usage so the most
+-- trained surface first (TRAINING.md §6).
+selectPickerByUsage:
+SELECT m.id, m.name, m.group_id, g.name AS group_name, COUNT(sm.id) AS usage_count
+FROM muscle m
+JOIN muscle_group g ON g.id = m.group_id
+LEFT JOIN session_muscle sm ON sm.muscle_id = m.id
+WHERE m.is_archived = 0 AND g.is_archived = 0
+GROUP BY m.id
+ORDER BY g.name ASC, usage_count DESC, m.name ASC;
+
+insertMuscle:
+INSERT INTO muscle (group_id, name, is_archived, created_at) VALUES (?, ?, 0, ?);
+
+-- Clears seed_key for the same reason as renameGroup.
+renameMuscle:
+UPDATE muscle SET name = ?, seed_key = NULL WHERE id = ?;
+
+setMuscleArchived:
+UPDATE muscle SET is_archived = ? WHERE id = ?;
+
+-- Integrity rule 3: hard delete only with no referencing sessions.
+countSessionsForMuscle:
+SELECT COUNT(*) FROM session_muscle WHERE muscle_id = ?;
+
+countSessionsForGroup:
+SELECT COUNT(*) FROM session_muscle sm
+JOIN muscle m ON m.id = sm.muscle_id
+WHERE m.group_id = ?;
+
+deleteMuscle:
+DELETE FROM muscle WHERE id = ?;
+
+-- ---------- the shipped catalogue ----------
+--
+-- Seeded rows are ordinary rows: they carry a name in the current language, and
+-- every query above reads them without knowing they were not typed by the user.
+-- What `seed_key` buys is the two things that need to know — retranslating a name
+-- when the device language changes, and not inserting the same row twice.
+
+insertSeededGroup:
+INSERT INTO muscle_group (name, is_archived, created_at, seed_key) VALUES (?, 0, ?, ?);
+
+insertSeededMuscle:
+INSERT INTO muscle (group_id, name, is_archived, created_at, seed_key) VALUES (?, ?, 0, ?, ?);
+
+-- Name as well as id: the sync compares it against the current language and skips the
+-- write when they already agree, so a launch in the same language writes nothing.
+selectGroupBySeedKey:
+SELECT id, name FROM muscle_group WHERE seed_key = ?;
+
+selectMuscleBySeedKey:
+SELECT id, name FROM muscle WHERE seed_key = ?;
+
+renameSeededGroup:
+UPDATE muscle_group SET name = ? WHERE seed_key = ?;
+
+renameSeededMuscle:
+UPDATE muscle SET name = ? WHERE seed_key = ?;
+
+-- ---------- the seed ledger ----------
+
+selectAppliedSeedKeys:
+SELECT seed_key FROM muscle_seed;
+
+-- OR IGNORE rather than a pre-check: the key is the primary key, and re-marking an
+-- applied key is a no-op rather than an error.
+markSeedApplied:
+INSERT OR IGNORE INTO muscle_seed (seed_key, applied_at) VALUES (?, ?);
+
+lastInsertRowId:
+SELECT last_insert_rowid();

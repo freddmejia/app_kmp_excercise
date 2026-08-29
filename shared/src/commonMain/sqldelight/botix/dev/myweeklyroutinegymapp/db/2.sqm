@@ -1,0 +1,17 @@
+-- Schema 2 -> 3: the optional activity -> muscle link.
+--
+-- Purely additive: one new table and its index. No existing table is altered, so
+-- every activity starts with no linked muscles, which is exactly the "no opinion"
+-- state that makes the log picker fall back to the whole catalogue.
+--
+-- Mirrors ActivityMuscle.sq exactly. The two must agree: a fresh install runs
+-- Schema.create() and never touches this file, so any drift only ever breaks for
+-- users who upgrade.
+
+CREATE TABLE activity_muscle (
+    activity_id INTEGER NOT NULL REFERENCES activity(id) ON DELETE CASCADE,
+    muscle_id   INTEGER NOT NULL REFERENCES muscle(id) ON DELETE CASCADE,
+    PRIMARY KEY (activity_id, muscle_id)
+);
+
+CREATE INDEX activity_muscle_muscle_idx ON activity_muscle(muscle_id);

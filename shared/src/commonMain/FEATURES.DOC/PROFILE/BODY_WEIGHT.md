@@ -1,106 +1,106 @@
-# FEATURE — Peso corporal
+# FEATURE — Body Weight
 
-> CRUD **aislado**: sin dependencias aguas arriba ni aguas abajo. Una medida por día, filtrable por fecha/mes, con gráfico de líneas para ver la evolución.
+> **Isolated** CRUD: no dependencies upstream or downstream. One measurement per day, filterable by date/month, with a line chart to show evolution.
 >
-> Nota de consistencia: la métrica "fuerza relativa" (e1RM ÷ peso) que en su día conectaría esta pantalla con Fuerza **queda sin efecto**, porque el flujo de Fuerza soltó carga/reps. Por tanto el peso corporal es hoy **completamente autónomo**.
+> Consistency note: the "relative strength" metric (e1RM ÷ body weight) that would once have connected this screen to Strength **no longer applies**, because the Strength flow dropped load/reps. Body weight is therefore **fully standalone** today.
 
 ---
 
-## 1. Propósito y frontera
+## 1. Purpose and boundary
 
-Registra el peso corporal en el tiempo y lo grafica. No alimenta ninguna otra pantalla. Su valor está en la **lectura de tendencia**, no en el dato suelto.
+Records body weight over time and charts it. It feeds no other screen. Its value is in the **trend reading**, not in the individual data point.
 
-Regla de frontera: una medida numérica por día + su evolución. Nada de composición corporal, medidas, ni % graso (extensión futura si se quiere).
+Boundary rule: one numeric measurement per day + its evolution. No body composition, measurements, or body-fat % (future extension if desired).
 
 ---
 
-## 2. Modelo de datos
+## 2. Data model
 
-Tabla `body_weight`.
+Table `body_weight`.
 
-| Campo | Tipo | Oblig. | Descripción |
+| Field | Type | Req. | Description |
 |---|---|---|---|
 | `id` | INTEGER PK | auto | |
-| `date_epoch_day` | INTEGER **UNIQUE** | sí | Una medida por día |
-| `weight_kg` | REAL | sí | Unidad canónica **kg** (conversión a lb solo en UI si algún día se añade) |
-| `note` | TEXT | no | Contexto ("en ayunas", "post-viaje"); no alimenta métrica |
+| `date_epoch_day` | INTEGER **UNIQUE** | yes | One measurement per day |
+| `weight_kg` | REAL | yes | Canonical unit **kg** (conversion to lb in the UI only if ever added) |
+| `note` | TEXT | no | Context ("fasted", "post-trip"); does not feed any metric |
 
-`date_epoch_day` es único → registrar dos veces el mismo día **sobrescribe** (upsert), no duplica.
-
----
-
-## 3. Campos mostrados
-
-**Fila de histórico**: fecha, peso, delta respecto a la medida anterior (▲/▼ kg), nota si existe.
-**Cabecera / resumen del rango**: peso actual, cambio en el rango, tendencia, ritmo (ver §6).
-**Gráfico**: ver §5.
+`date_epoch_day` is unique → logging twice on the same day **overwrites** (upsert), it does not duplicate.
 
 ---
 
-## 4. Filtrado y ordenación
+## 3. Displayed fields
 
-| Filtro | Valores | Default |
+**History row**: date, weight, delta vs. the previous measurement (▲/▼ kg), note if present.
+**Range header / summary**: current weight, change over the range, trend, rate (see §6).
+**Chart**: see §5.
+
+---
+
+## 4. Filtering and ordering
+
+| Filter | Values | Default |
 |---|---|---|
-| Rango de fechas | from–to | últimos 30 días |
-| Mes | selector de mes → puntos diarios de ese mes | — |
-| Presets | 30 d / 3 m / 6 m / 1 año / todo | 30 d |
+| Date range | from–to | last 30 days |
+| Month | month selector → that month's daily points | — |
+| Presets | 30 d / 3 m / 6 m / 1 year / all | 30 d |
 
-Orden del histórico: fecha desc. El filtro es un `StateFlow` que se `combine` con la serie → gráfico y lista siempre consistentes con el rango elegido.
-
----
-
-## 5. Gráfico de líneas (decisión de valor)
-
-El peso corporal fluctúa a diario (agua, comida, sueño); **una línea de puntos crudos es engañosa**. Por eso el gráfico tiene dos capas:
-
-1. **Puntos crudos** — cada medida diaria, tenue.
-2. **Media móvil (7 días)** — línea principal, es la que revela la tendencia real.
-
-Modo según el rango:
-- **Rango corto** (≤ ~90 días): eje X por día; crudos + media móvil.
-- **Rango largo** (> ~90 días o vista anual): eje X por mes; **media mensual** como serie principal (más legible que miles de puntos).
-
-Huecos (días sin medida): la línea **se conecta a través del hueco** (interpolación visual), estándar para tendencia de peso. Con una sola medida en el rango → solo el punto, sin línea. La media móvil requiere un mínimo de puntos para dibujarse.
+History order: date desc. The filter is a `StateFlow` that is `combine`d with the series → chart and list always consistent with the chosen range.
 
 ---
 
-## 6. Métricas derivadas (todas calculadas, no guardadas)
+## 5. Line chart (the value decision)
 
-| Métrica | Cálculo | Para qué |
+Body weight fluctuates daily (water, food, sleep); **a raw-point line is misleading**. The chart therefore has two layers:
+
+1. **Raw points** — each daily measurement, faint.
+2. **Moving average (7 days)** — the main line, the one that reveals the real trend.
+
+Mode by range:
+- **Short range** (≤ ~90 days): X axis by day; raw + moving average.
+- **Long range** (> ~90 days or yearly view): X axis by month; **monthly average** as the main series (more legible than thousands of points).
+
+Gaps (days with no measurement): the line **connects across the gap** (visual interpolation), standard for weight trend. With a single measurement in the range → just the point, no line. The moving average requires a minimum number of points to be drawn.
+
+---
+
+## 6. Derived metrics (all computed, not stored)
+
+| Metric | Calculation | Purpose |
 |---|---|---|
-| **Peso actual** | última medida | referencia |
-| **Cambio en el rango** | último − primero (Δ kg y %) | resultado del periodo |
-| **Tendencia** | pendiente de la media móvil → subiendo / bajando / estable | dirección real sin ruido |
-| **Ritmo** | Δ kg ÷ semanas del rango (kg/semana) | control de déficit/superávit |
-| **Mín / máx del rango** | extremos | dispersión |
+| **Current weight** | last measurement | reference |
+| **Change over range** | last − first (Δ kg and %) | period outcome |
+| **Trend** | slope of the moving average → rising / falling / stable | real direction without noise |
+| **Rate** | Δ kg ÷ weeks in range (kg/week) | deficit/surplus control |
+| **Min / max of range** | extremes | dispersion |
 
 ---
 
-## 7. CRUD reactivo
+## 7. Reactive CRUD
 
-Serie observable vía `Flow` de SQLDelight; escritura re-emite y refresca lista + gráfico + resumen sin refresco manual.
+Series observable via SQLDelight `Flow`; a write re-emits and refreshes list + chart + summary with no manual refresh.
 
-- **Create / upsert**: una por día; si ya existe el día, sobrescribe.
-- **Read**: serie filtrada por rango, reactiva.
-- **Update**: editar el peso o la nota de un día.
-- **Delete**: **borrado duro permitido sin restricción.**
+- **Create / upsert**: one per day; if the day already exists, it overwrites.
+- **Read**: series filtered by range, reactive.
+- **Update**: edit a day's weight or note.
+- **Delete**: **hard delete allowed with no restriction.**
 
-Aquí está la diferencia con Actividad y Músculos: como esta entidad **no tiene dependientes** (nadie referencia una medida de peso), borrar es seguro y no rompe ninguna métrica histórica. Por eso **no aplica el "archivar en vez de borrar"** — esa regla existía para proteger histórico referenciado, y aquí no lo hay. El criterio es el mismo de siempre (proteger integridad), y aquí simplemente no hay nada que proteger.
-
----
-
-## 8. Validaciones y casos borde
-
-- `weight_kg` requerido y > 0 → bloquea guardar.
-- Registrar día ya existente → confirma sobrescritura (upsert).
-- Rango sin medidas → gráfico vacío con estado "sin datos en este rango".
-- Una sola medida → punto sin línea; métricas de tendencia/ritmo se muestran "sin dato suficiente".
+This is where it differs from Activities and Muscles: since this entity **has no dependents** (nothing references a weight measurement), deleting is safe and breaks no historical metric. That is why **"archive instead of delete" does not apply** — that rule existed to protect referenced history, and here there is none. The criterion is the same as always (protect integrity); here there is simply nothing to protect.
 
 ---
 
-## 9. Decisiones abiertas (a ratificar)
+## 8. Validation and edge cases
 
-1. **Ventana de la media móvil**: 7 días (recomendado) vs. configurable.
-2. **Umbral rango corto/largo** para cambiar a vista mensual: ~90 días vs. otro.
-3. **Confirmación de sobrescritura** al registrar un día ya existente: ¿pedirla o upsert silencioso?
-4. **Nota por medida**: ¿la mantenemos o la quitamos para dejarlo aún más mínimo?
+- `weight_kg` required and > 0 → blocks save.
+- Logging a day that already exists → confirm overwrite (upsert).
+- Range with no measurements → empty chart with a "no data in this range" state.
+- A single measurement → point with no line; trend/rate metrics show "not enough data".
+
+---
+
+## 9. Open decisions (to ratify)
+
+1. **Moving-average window**: 7 days (recommended) vs. configurable.
+2. **Short/long range threshold** for switching to the monthly view: ~90 days vs. another.
+3. **Overwrite confirmation** when logging a day that already exists: prompt for it or silent upsert?
+4. **Per-measurement note**: keep it, or drop it to make it even more minimal?

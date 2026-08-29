@@ -1,0 +1,57 @@
+-- Isolated CRUD: nothing references a body-weight measurement, so hard delete is
+-- safe here (unlike Activity and Muscle, which archive instead). One row per day.
+CREATE TABLE body_weight (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    date_epoch_day INTEGER NOT NULL UNIQUE,
+    weight_kg      REAL NOT NULL,
+    note           TEXT
+);
+
+CREATE INDEX body_weight_date_idx ON body_weight(date_epoch_day);
+
+selectAll:
+SELECT * FROM body_weight ORDER BY date_epoch_day DESC;
+
+-- Range-filtered series, both bounds inclusive. Ascending so the chart can plot
+-- it directly; the history list reverses it.
+selectRange:
+SELECT * FROM body_weight
+WHERE date_epoch_day BETWEEN :fromDay AND :toDay
+ORDER BY date_epoch_day ASC;
+
+selectRangeDesc:
+SELECT * FROM body_weight
+WHERE date_epoch_day BETWEEN :fromDay AND :toDay
+ORDER BY date_epoch_day DESC;
+
+selectByDay:
+SELECT * FROM body_weight WHERE date_epoch_day = ?;
+
+selectLatest:
+SELECT * FROM body_weight ORDER BY date_epoch_day DESC LIMIT 1;
+
+-- Min/max over the range, for the dispersion metric (§6).
+selectRangeExtremes:
+SELECT MIN(weight_kg) AS min_kg, MAX(weight_kg) AS max_kg, COUNT(*) AS sample_count
+FROM body_weight
+WHERE date_epoch_day BETWEEN :fromDay AND :toDay;
+
+-- date_epoch_day is UNIQUE: logging the same day twice overwrites rather than
+-- duplicating. This is the upsert the spec calls for.
+--
+-- INSERT OR REPLACE rather than ON CONFLICT DO UPDATE: UPSERT needs SQLite 3.24
+-- (Android API 29+), and minSdk here is 24. REPLACE deletes the conflicting row
+-- and inserts a new one, so the row's `id` changes — harmless for this table
+-- precisely because nothing references a body-weight id.
+upsert:
+INSERT OR REPLACE INTO body_weight (date_epoch_day, weight_kg, note)
+VALUES (?, ?, ?);
+
+updateById:
+UPDATE body_weight SET weight_kg = ?, note = ? WHERE id = ?;
+
+deleteByDay:
+DELETE FROM body_weight WHERE date_epoch_day = ?;
+
+deleteById:
+DELETE FROM body_weight WHERE id = ?;

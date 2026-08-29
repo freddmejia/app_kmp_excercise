@@ -1,0 +1,22 @@
+-- Schema 3 -> 4: distance and duration on a session.
+--
+-- Until now a session could only be measured in sets, which is why a DISTANCE_TIME
+-- activity could be *created* and never logged: there was nowhere to put the numbers.
+--
+-- Both columns are nullable and both stay null for every strength session, so this is
+-- additive in effect as well as in form — no existing row changes meaning, and no
+-- backfill is needed.
+--
+-- ### Units are not stored
+-- Metres and seconds, always. What the user types (km, minutes) and what they read
+-- back are presentation, so switching to miles later is a formatting change rather
+-- than a migration. Integers rather than reals for the same reason a set count is an
+-- integer: 20.5 km is 20500 m exactly, and no rounding drifts across a save/load.
+--
+-- Mirrors WorkoutSession.sq exactly. The two must agree: a fresh install runs
+-- Schema.create() and never touches this file, so any drift only ever breaks for
+-- users who upgrade.
+
+ALTER TABLE workout_session ADD COLUMN distance_meters INTEGER;
+
+ALTER TABLE workout_session ADD COLUMN duration_seconds INTEGER;

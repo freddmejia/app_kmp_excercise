@@ -1,0 +1,80 @@
+import kotlin.Boolean;
+
+-- User-editable grouping for the activity catalogue: "Cardio", "Running", "Mobility".
+--
+-- Deliberately NOT a second `measurement_type`. That enum is a contract that decides
+-- which logging form applies and which metrics exist downstream, so it is closed in
+-- code at three values. A category is pure organisation: it feeds no metric and
+-- constrains no form, which is exactly why it can be free-form data the user owns.
+CREATE TABLE activity_category (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    icon        TEXT,
+    color       TEXT,
+    is_archived INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+);
+
+-- Same rule as `activity`: unique among non-archived rows, so two active "Cardio"
+-- cannot coexist while an archived one keeps its name.
+CREATE UNIQUE INDEX activity_category_active_name_unique
+ON activity_category(name) WHERE is_archived = 0;
+
+CREATE INDEX activity_category_archived_idx ON activity_category(is_archived);
+
+selectAll:
+SELECT * FROM activity_category ORDER BY name ASC;
+
+selectActive:
+SELECT * FROM activity_category WHERE is_archived = 0 ORDER BY name ASC;
+
+selectArchived:
+SELECT * FROM activity_category WHERE is_archived = 1 ORDER BY name ASC;
+
+selectById:
+SELECT * FROM activity_category WHERE id = ?;
+
+-- Management list: every category with how many activities sit in it. LEFT JOIN so
+-- an empty category still appears — it is the one you most likely want to rename or
+-- delete, and an INNER JOIN would hide it.
+selectActiveWithUsage:
+SELECT c.*, COUNT(a.id) AS activity_count
+FROM activity_category c
+LEFT JOIN activity a ON a.category_id = c.id AND a.is_archived = 0
+WHERE c.is_archived = 0
+GROUP BY c.id
+ORDER BY c.name ASC;
+
+-- How many activities a delete would leave uncategorised. Read *before* deleting:
+-- ON DELETE SET NULL means the count is zero once the row is gone.
+countActivitiesIn:
+SELECT COUNT(*) FROM activity WHERE category_id = ?;
+
+-- Lets the create/rename form report "name already in use" as a field error instead
+-- of letting the unique index throw at insert time.
+countActiveWithName:
+SELECT COUNT(*) FROM activity_category
+WHERE is_archived = 0 AND name = :name AND id != :excludingId;
+
+insert:
+INSERT INTO activity_category (name, icon, color, is_archived, created_at)
+VALUES (?, ?, ?, 0, ?);
+
+updateIdentity:
+UPDATE activity_category SET name = ?, icon = ?, color = ? WHERE id = ?;
+
+setArchived:
+UPDATE activity_category SET is_archived = ? WHERE id = ?;
+
+-- Unrestricted, unlike `activity` and `muscle`.
+--
+-- Those two refuse a hard delete because sessions reference them and past metrics
+-- would break. Nothing references a category except the activities' own label, and
+-- ON DELETE SET NULL turns those rows into uncategorised activities rather than
+-- orphans. The criterion is the same as everywhere else — protect history — and here
+-- there is no history to protect.
+deleteById:
+DELETE FROM activity_category WHERE id = ?;
+
+lastInsertRowId:
+SELECT last_insert_rowid();

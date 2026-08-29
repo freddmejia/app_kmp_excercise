@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark counterpart of values/themes.xml. Mirrors GymTheme's dark `surface`. -->
+<resources>
+    <style name="Theme.Gym" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0E1116</item>
+    </style>
+</resources>

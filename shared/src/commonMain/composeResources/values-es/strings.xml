@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Español. Los apóstrofes van escapados como \' (formato Android). -->
+<resources>
+
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_save">Guardar</string>
+    <string name="common_delete">Eliminar</string>
+    <string name="common_archive">Archivar</string>
+    <string name="common_unarchive">Desarchivar</string>
+    <string name="common_new">Nueva</string>
+    <string name="common_add">Añadir</string>
+    <string name="common_back">Atrás</string>
+    <string name="common_go">Ir</string>
+    <string name="common_all">Todas</string>
+    <string name="common_none">Ninguna</string>
+    <string name="common_name">Nombre</string>
+    <string name="common_icon_optional">Icono (emoji, opcional)</string>
+    <string name="common_saved">Guardado.</string>
+    <string name="common_deleted">Eliminado.</string>
+    <string name="common_archived">Archivado.</string>
+
+    <string name="tab_log">Registro</string>
+    <string name="tab_activities">Actividades</string>
+    <string name="tab_weight">Peso</string>
+    <string name="tab_preferences">Preferencias</string>
+
+    <string name="week_today">Hoy</string>
+    <string name="week_select_date">Elegir fecha</string>
+
+    <string name="day_mon">Lun</string>
+    <string name="day_tue">Mar</string>
+    <string name="day_wed">Mié</string>
+    <string name="day_thu">Jue</string>
+    <string name="day_fri">Vie</string>
+    <string name="day_sat">Sáb</string>
+    <string name="day_sun">Dom</string>
+
+    <string name="month_jan">Ene</string>
+    <string name="month_feb">Feb</string>
+    <string name="month_mar">Mar</string>
+    <string name="month_apr">Abr</string>
+    <string name="month_may">May</string>
+    <string name="month_jun">Jun</string>
+    <string name="month_jul">Jul</string>
+    <string name="month_aug">Ago</string>
+    <string name="month_sep">Sep</string>
+    <string name="month_oct">Oct</string>
+    <string name="month_nov">Nov</string>
+    <string name="month_dec">Dic</string>
+
+    <!-- "Vie 21 ago 2026" — el español intercala "de" en formato largo, pero la
+         forma corta con espacios es la habitual en interfaces compactas. -->
+    <string name="date_full">%1$s %2$s %3$s %4$s</string>
+    <string name="week_range_same_month">%1$s–%2$s %3$s %4$s</string>
+    <string name="week_range_cross_month">%1$s %2$s – %3$s %4$s %5$s</string>
+    <string name="week_range_cross_year">%1$s %2$s %3$s – %4$s %5$s %6$s</string>
+
+    <string name="activities_title">Actividades</string>
+    <string name="activities_empty">No hay actividades aquí.</string>
+    <string name="activities_empty_in_category">No hay actividades en esta categoría.</string>
+    <string name="activities_empty_hint">Una actividad declara qué haces y cómo se mide.</string>
+    <string name="activities_trained_day">Entrenado %1$s</string>
+    <string name="activities_nothing_trained_day">Nada entrenado %1$s</string>
+    <string name="activities_nothing_trained_day_hint">Elige otro día para ver lo que entrenaste.</string>
+    <string name="activities_not_trained_day">No entrenado este día</string>
+    <string name="activities_uncategorised">Sin categoría</string>
+    <string name="activities_archived_badge">Archivada</string>
+    <string name="activity_filter_active">Activas</string>
+    <string name="activity_filter_archived">Archivadas</string>
+    <string name="activity_filter_all">Todas</string>
+    <string name="activities_day_volume">%1$s efectivas · %2$s calentamiento · %3$s</string>
+    <string name="activities_day_distance">%1$s km · %2$s min · %3$s</string>
+    <string name="activity_new_title">Nueva actividad</string>
+    <string name="activity_edit_title">Editar actividad</string>
+    <string name="activity_category_label">Categoría</string>
+    <string name="activity_measure_question">¿Cómo se mide?</string>
+    <string name="activity_muscles_optional">Músculos (opcional)</string>
+    <string name="activity_muscles_hint">Déjalo vacío y la pantalla de registro ofrecerá todos los músculos.</string>
+    <string name="activity_no_muscles_hint">Aún no hay músculos. Añádelos en Preferencias, en Músculos.</string>
+    <string name="activity_msg_name_blank">Ponle un nombre a la actividad.</string>
+    <string name="activity_msg_name_taken">Otra actividad activa ya usa ese nombre.</string>
+    <string name="activity_msg_delete_blocked">No se puede eliminar: %1$s la referencian. Archívala en su lugar.</string>
+    <string name="activity_msg_type_locked">El tipo está bloqueado: %1$s ya registradas.</string>
+    <string name="measure_strength">Fuerza — músculos y series</string>
+    <string name="measure_distance">Distancia y tiempo</string>
+    <string name="measure_simple">Simple — lo hice ese día</string>
+
+    <string name="categories_title">Categorías</string>
+    <string name="categories_empty">Aún no hay categorías.</string>
+    <string name="categories_empty_hint">Una categoría agrupa actividades — Cardio, Running, Movilidad. Es tu propia etiqueta: no cambia cómo se mide una actividad.</string>
+    <string name="category_new_title">Nueva categoría</string>
+    <string name="category_edit_title">Editar categoría</string>
+    <string name="category_delete_title">¿Eliminar \"%1$s\"?</string>
+    <string name="category_delete_none">Ninguna actividad la usa.</string>
+    <string name="category_delete_count">%1$s se quedarán sin categoría. No se eliminan y su historial queda intacto.</string>
+    <string name="category_no_activities">Sin actividades</string>
+    <string name="category_msg_name_blank">Ponle un nombre a la categoría.</string>
+    <string name="category_msg_name_taken">Otra categoría ya usa ese nombre.</string>
+    <string name="category_msg_deleted_count">Eliminada. %1$s ahora sin categoría.</string>
+    <string name="category_msg_archived_count">Archivada. %1$s ahora sin categoría.</string>
+
+    <string name="muscles_title">Músculos</string>
+    <string name="muscles_add_group">Añadir grupo</string>
+    <string name="muscles_empty">Aún no hay grupos musculares.</string>
+    <string name="muscles_empty_hint">Añade un grupo como Pecho y luego músculos dentro. Un músculo \"General\" permite registrar el grupo entero de una vez.</string>
+    <string name="muscles_no_leaves">Aún no hay músculos — añade uno antes de registrar este grupo.</string>
+    <string name="muscle_new_group">Nuevo grupo muscular</string>
+    <string name="muscle_new">Nuevo músculo</string>
+    <string name="muscle_edit_group">Editar grupo muscular</string>
+    <string name="muscle_edit">Editar músculo</string>
+    <string name="preferences_title">Preferencias</string>
+    <string name="preferences_muscles_hint">Grupos y los músculos a los que apuntas las series.</string>
+    <string name="preferences_categories_hint">Etiquetas que agrupan tus actividades.</string>
+    <string name="muscle_msg_name_blank">Ponle un nombre.</string>
+    <string name="muscle_msg_delete_blocked">No se puede eliminar: %1$s lo referencian. Archívalo para conservar su historial.</string>
+
+    <string name="log_title">Registrar entrenamiento</string>
+    <string name="log_new">Nuevo registro</string>
+    <string name="log_edit">Editar registro</string>
+    <string name="log_nothing_today">Nada registrado hoy.</string>
+    <string name="log_nothing_day">Nada registrado ese día.</string>
+    <string name="log_hint_no_activities">Crea primero una actividad de fuerza en la pestaña Actividades.</string>
+    <string name="log_hint_new_log">Usa \"Nuevo registro\" para empezar uno ese día.</string>
+    <string name="log_nothing_checked">Nada marcado todavía</string>
+    <string name="log_summary">%1$s efectivas · %2$s calentamiento · %3$s</string>
+    <string name="log_delete_title">¿Eliminar este registro?</string>
+    <string name="log_delete_empty">%1$s — no se registró nada en él.</string>
+    <string name="log_delete_count">%1$s — se eliminarán %2$s en %3$s.</string>
+    <string name="log_no_strength_activities">Aún no hay actividades de fuerza. Crea una en la pestaña Actividades — solo las de tipo FUERZA usan este formulario.</string>
+    <string name="log_no_muscles">No hay músculos en el catálogo.</string>
+    <string name="log_no_muscles_hint">Añade grupos y músculos en Preferencias antes de registrar.</string>
+    <string name="log_untrained_header">No entrenados en los últimos 7 días</string>
+    <string name="log_totals_warmup">%1$s de calentamiento</string>
+    <string name="log_warmup_ratio">Ratio de calentamiento %1$s</string>
+    <string name="log_effective">Efectivas</string>
+    <string name="log_warmup">Calentamiento</string>
+    <string name="log_msg_logged">Registrado.</string>
+    <string name="log_msg_removed">Eliminado.</string>
+    <string name="log_msg_invalid_sets">Un músculo marcado necesita al menos una serie efectiva.</string>
+    <string name="log_msg_activity_missing">Esa actividad ya no existe.</string>
+    <string name="log_distance_km">Distancia (km)</string>
+    <string name="log_duration_min">Duración (min)</string>
+    <string name="log_distance_time_title">Registrar %1$s</string>
+    <string name="log_msg_nothing_measured">Introduce una distancia o un tiempo.</string>
+    <string name="log_no_activities_at_all">Aún no hay actividades. Crea una en la pestaña Actividades.</string>
+    <string name="log_distance_summary">%1$s km · %2$s min</string>
+    <string name="log_pace">%1$s /km</string>
+    <string name="log_scope_activity">Mostrando los músculos de esta actividad.</string>
+    <string name="log_scope_all">Mostrando todos los músculos.</string>
+    <string name="log_show_all">Ver todos</string>
+    <string name="log_show_activity">Ver los de la actividad</string>
+
+    <string name="weight_title">Peso corporal</string>
+    <string name="weight_history">Historial</string>
+    <string name="weight_empty">No hay medidas en este rango.</string>
+    <string name="weight_empty_hint">Una medida por día — registrar el mismo día otra vez la reemplaza.</string>
+    <string name="weight_kg">%1$s kg</string>
+    <string name="weight_no_data">Sin datos</string>
+    <string name="weight_change">Cambio: %1$s kg</string>
+    <string name="weight_change_percent"> (%1$s%%)</string>
+    <string name="weight_trend_rising">Tendencia: subiendo</string>
+    <string name="weight_trend_falling">Tendencia: bajando</string>
+    <string name="weight_trend_stable">Tendencia: estable</string>
+    <string name="weight_trend_insufficient">Tendencia: datos insuficientes</string>
+    <string name="weight_rate">Ritmo: %1$s kg/semana</string>
+    <string name="weight_samples">%1$s · vista %2$s</string>
+    <string name="weight_mode_daily">diaria</string>
+    <string name="weight_mode_monthly">mensual</string>
+    <string name="weight_preset_days">%1$sd</string>
+    <string name="weight_input_label">Peso (kg)</string>
+    <string name="weight_note_label">Nota (opcional)</string>
+    <string name="weight_entry_new">Nueva medida</string>
+    <string name="weight_entry_edit">Editar medida</string>
+    <string name="weight_delete_title">¿Eliminar esta medida?</string>
+    <string name="weight_delete_text">Se eliminarán %1$s kg del %2$s.</string>
+    <string name="weight_log">Registrar</string>
+    <string name="weight_replace">Reemplazar</string>
+    <string name="weight_future">Ese día todavía no ha llegado.</string>
+    <string name="weight_already">Ya hay %1$s kg — guardar lo reemplaza.</string>
+    <string name="weight_one_per_day">Una medida por día.</string>
+    <string name="weight_msg_invalid">Introduce un peso mayor que cero.</string>
+    <string name="chart_one_measurement">Una sola medida — todavía sin línea.</string>
+
+    <!-- ================= shipped muscle catalogue =================
+         Names of the muscles the app ships (see ResourceMuscleSeed). These are the
+         only strings that end up stored in the database rather than read straight
+         from here: a start-up pass writes them into muscle.name so every catalogue
+         query stays a plain name lookup, and rewrites them when the device language
+         changes. Editing one here therefore renames it on every device that has not
+         renamed it by hand.
+         Gym vocabulary, not anatomy-textbook vocabulary. -->
+    <string name="muscle_seed_general">General</string>
+    <string name="muscle_seed_chest">Pecho</string>
+    <string name="muscle_seed_chest_upper">Pecho superior</string>
+    <string name="muscle_seed_chest_middle">Pecho medio</string>
+    <string name="muscle_seed_chest_lower">Pecho inferior</string>
+    <string name="muscle_seed_back">Espalda</string>
+    <string name="muscle_seed_lats">Dorsales</string>
+    <string name="muscle_seed_traps">Trapecios</string>
+    <string name="muscle_seed_rhomboids">Romboides</string>
+    <string name="muscle_seed_lower_back">Lumbares</string>
+    <string name="muscle_seed_shoulders">Hombros</string>
+    <string name="muscle_seed_delt_front">Deltoides anterior</string>
+    <string name="muscle_seed_delt_side">Deltoides lateral</string>
+    <string name="muscle_seed_delt_rear">Deltoides posterior</string>
+    <string name="muscle_seed_arms">Brazos</string>
+    <string name="muscle_seed_biceps">Bíceps</string>
+    <string name="muscle_seed_triceps">Tríceps</string>
+    <string name="muscle_seed_forearms">Antebrazos</string>
+    <string name="muscle_seed_legs">Piernas</string>
+    <string name="muscle_seed_quads">Cuádriceps</string>
+    <string name="muscle_seed_hamstrings">Isquiotibiales</string>
+    <string name="muscle_seed_glutes">Glúteos</string>
+    <string name="muscle_seed_adductors">Aductores</string>
+    <string name="muscle_seed_calves">Gemelos</string>
+    <string name="muscle_seed_core">Core</string>
+    <string name="muscle_seed_abs_upper">Abdomen superior</string>
+    <string name="muscle_seed_abs_lower">Abdomen inferior</string>
+    <string name="muscle_seed_obliques">Oblicuos</string>
+    <string name="muscle_seed_neck">Cuello</string>
+
+    <plurals name="plural_activities">
+        <item quantity="one">%1$s actividad</item>
+        <item quantity="other">%1$s actividades</item>
+    </plurals>
+    <plurals name="plural_muscles">
+        <item quantity="one">%1$s músculo</item>
+        <item quantity="other">%1$s músculos</item>
+    </plurals>
+    <plurals name="plural_sessions">
+        <item quantity="one">%1$s sesión</item>
+        <item quantity="other">%1$s sesiones</item>
+    </plurals>
+    <plurals name="plural_days">
+        <item quantity="one">%1$s día</item>
+        <item quantity="other">%1$s días</item>
+    </plurals>
+    <plurals name="plural_effective_sets">
+        <item quantity="one">%1$s serie efectiva</item>
+        <item quantity="other">%1$s series efectivas</item>
+    </plurals>
+    <plurals name="plural_measurements">
+        <item quantity="one">%1$s medida</item>
+        <item quantity="other">%1$s medidas</item>
+    </plurals>
+    <plurals name="plural_session_entries">
+        <item quantity="one">%1$s entrada de sesión</item>
+        <item quantity="other">%1$s entradas de sesión</item>
+    </plurals>
+</resources>

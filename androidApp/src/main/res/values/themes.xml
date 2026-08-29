@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The launch window only.
+
+    The app's palette lives in `presentation/theme/Theme.kt` (commonMain) and this is
+    the one place that cannot read it: the window exists before Compose does. Without
+    it the manifest's stock `Theme.Material.Light` painted a white window under a dark
+    app, so launching in dark mode flashed white for as long as the first frame took.
+
+    These two values mirror GymTheme's `surface` in each scheme. They are the only
+    duplicated colours in the project — keep them in step with Theme.kt.
+-->
+<resources>
+    <style name="Theme.Gym" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F7F9FC</item>
+    </style>
+</resources>
