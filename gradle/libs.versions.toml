@@ -17,6 +17,8 @@ kotlinx-coroutines = "1.10.2"
 kotlinx-datetime = "0.7.0"
 material3 = "1.11.0-alpha07"
 sqldelight = "2.1.0"
+sqlcipher = "4.6.1"
+androidx-sqlite = "2.5.2"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -53,6 +55,8 @@ sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-ex
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
 sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher" }
+androidx-sqlite = { module = "androidx.sqlite:sqlite", version.ref = "androidx-sqlite" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

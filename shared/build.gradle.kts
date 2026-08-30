@@ -45,6 +45,12 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
             implementation(libs.sqldelight.android.driver)
+            // Whole-database encryption. SQLCipher replaces the SQLite that
+            // AndroidSqliteDriver would otherwise open, so every query, index and
+            // aggregate keeps working on plaintext values in memory while the file
+            // on disk is ciphertext.
+            implementation(libs.sqlcipher.android)
+            implementation(libs.androidx.sqlite)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.koin.android)
         }
