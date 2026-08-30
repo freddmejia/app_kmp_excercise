@@ -1,6 +1,10 @@
 rootProject.name = "MyWeeklyRoutineGymApp"
 
 pluginManagement {
+    // Convention plugins. Must be included here, before any project is
+    // evaluated, or their plugin ids cannot be resolved.
+    includeBuild("build-logic")
+
     repositories {
         google {
             mavenContent {

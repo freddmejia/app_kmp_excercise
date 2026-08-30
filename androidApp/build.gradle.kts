@@ -4,6 +4,8 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
+    // Mirrors app.properties into BuildConfig for the app module.
+    id("myweeklyroutinegymapp.app-properties")
 }
 
 kotlin {

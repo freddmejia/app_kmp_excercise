@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.sqldelight)
+    // Generates AppConfig.kt into commonMain from app.properties.
+    id("myweeklyroutinegymapp.app-properties")
 }
 
 kotlin {

@@ -2,6 +2,7 @@ package botix.dev.myweeklyroutinegymapp.db
 
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
+import botix.dev.myweeklyroutinegymapp.config.AppConfig
 import co.touchlab.sqliter.DatabaseConfiguration
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSLibraryDirectory
@@ -35,42 +36,49 @@ import platform.Foundation.NSUserDomainMask
 actual class DriverFactory {
 
     actual fun createDriver(): SqlDriver {
-        deleteLegacyPlaintextDatabase()
+        deleteUnusedDatabase()
 
         val driver = NativeSqliteDriver(
             schema = GymDatabase.Schema,
             name = DATABASE_NAME,
             onConfiguration = { config ->
-                config.copy(
-                    encryptionConfig = DatabaseConfiguration.Encryption(
-                        key = DatabasePassphrase.getOrCreate(),
-                    ),
+                val withForeignKeys = config.copy(
                     extendedConfig = config.extendedConfig.copy(foreignKeyConstraints = true),
                 )
+                if (AppConfig.DATABASE_AVAILABLE_ENCRYPTED) {
+                    withForeignKeys.copy(
+                        encryptionConfig = DatabaseConfiguration.Encryption(
+                            key = DatabasePassphrase.getOrCreate(),
+                        ),
+                    )
+                } else {
+                    withForeignKeys
+                }
             },
         )
 
-        driver.verifyEncryptionIsActive()
+        if (AppConfig.DATABASE_AVAILABLE_ENCRYPTED) driver.verifyEncryptionIsActive()
         return driver
     }
 
     /**
-     * Drops the pre-encryption database, matching Android's `deleteDatabase` call.
+     * Drops whichever database this build is not using, matching Android's
+     * `deleteDatabase` call.
      *
      * SQLiter puts databases under Library/databases. The `-wal` and `-shm` sidecars are
      * removed explicitly: leaving them behind would leave readable pages on disk, which
      * is exactly what this change exists to prevent.
      */
-    private fun deleteLegacyPlaintextDatabase() {
+    private fun deleteUnusedDatabase() {
         val manager = NSFileManager.defaultManager
         val library = manager.URLsForDirectory(NSLibraryDirectory, NSUserDomainMask)
             .firstOrNull() as? platform.Foundation.NSURL ?: return
         val databases = library.URLByAppendingPathComponent("databases") ?: return
 
         listOf(
-            LEGACY_PLAINTEXT_DATABASE_NAME,
-            "$LEGACY_PLAINTEXT_DATABASE_NAME-wal",
-            "$LEGACY_PLAINTEXT_DATABASE_NAME-shm",
+            UNUSED_DATABASE_NAME,
+            "$UNUSED_DATABASE_NAME-wal",
+            "$UNUSED_DATABASE_NAME-shm",
         ).forEach { name ->
             databases.URLByAppendingPathComponent(name)?.let { url ->
                 if (manager.fileExistsAtPath(url.path ?: return@let)) {

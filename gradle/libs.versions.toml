@@ -21,6 +21,10 @@ sqlcipher = "4.6.1"
 androidx-sqlite = "2.5.2"
 
 [libraries]
+# Gradle plugin artifacts, consumed by build-logic as compileOnly so the convention
+# plugins compile against exactly the AGP and Kotlin the app uses.
+android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }
